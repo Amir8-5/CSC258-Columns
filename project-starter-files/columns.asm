@@ -49,7 +49,6 @@ main:
     # Initialize the game
  
     jal draw_walls
-    j game_loop
     
     # load a0 = x value and a1= y value to prepare to draw column
     li $a0, 2  #starting column
@@ -70,24 +69,37 @@ main:
     #draw three gem column at x, y pos
     jal draw_column
     
+    j game_loop
     li $v0, 10
     syscall
 
-
-
+    
 game_loop:
     # 1a. Check if key has been pressed
     # 1b. Check which key has been pressed
     # 2a. Check for collisions
 	# 2b. Update locations (capsules)
 	# 3. Draw the screen
-	
 	# 4. Sleep
-	li $v0, 32
-    li $a0, 1000  # Wait for 1000ms (1 second) to confirm it is drawing
-    syscall
-
+    # copied from the starter code
     # 5. Go back to Step 1
+    lw $t0, ADDR_KBRD               # $t0 = base address for keyboard
+    lw $t8, 0($t0)                  # Load first word from keyboard
+    beq $t8, 1, keyboard_input      # If first word 1, key is pressed
+    j game_loop
+
+
+    keyboard_input:                     # A key is pressed 
+        lw $a0, 4($t0)                  # Load second word from keyboard
+        beq $a0, 0x71, respond_to_Q     # Check if the key q was pressed
+        beq $a0, 0x64, respond_to_D
+        beq $a0, 0x61, respond_to_A
+        beq $a0, 0x77, respond_to_W
+        beq $a0, 0x73, respond_to_S
+    
+        syscall
+        j game_loop
+    
     j game_loop
 
 
@@ -154,39 +166,7 @@ draw_walls:
     
     jr $ra
     
-game_loop:
-    # 1a. Check if key has been pressed
-    # 1b. Check which key has been pressed
-    # 2a. Check for collisions
-	# 2b. Update locations (capsules)
-	# 3. Draw the screen
-	# 4. Sleep
-    # copied from the starter code
-    # 5. Go back to Step 1
-    lw $t0, ADDR_KBRD               # $t0 = base address for keyboard
-    lw $t8, 0($t0)                  # Load first word from keyboard
-    beq $t8, 1, keyboard_input      # If first word 1, key is pressed
-    j game_loop
-
-
-    keyboard_input:                     # A key is pressed 
-        lw $a0, 4($t0)                  # Load second word from keyboard
-        beq $a0, 0x71, respond_to_Q     # Check if the key q was pressed
-        beq $a0, 0x64, respond_to_D
-        beq $a0, 0x61, respond_to_A
-        beq $a0, 0x77, respond_to_W
-        beq $a0, 0x73, respond_to_S
     
-        syscall
-        j game_loop
-        
-    
-    
-    
-	
-    j game_loop
-
-
 # draws a column based on starting x (a0) and y (a1) with a three gem height and random colors
 draw_column:
     #store return address
