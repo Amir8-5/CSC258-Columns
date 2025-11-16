@@ -51,8 +51,20 @@ main:
     jal draw_walls
     
     # load a0 = x value and a1= y value to prepare to draw column
-    li $a0, 0  #starting column
-    li $a1, 0   # starting row
+    li $a0, 2  #starting column
+    li $a1, 1   # starting row
+    
+    #draw three gem column at x, y pos
+    jal draw_column
+    
+    li $a0, 4  #starting column
+    li $a1, 4   # starting row
+    
+    #draw three gem column at x, y pos
+    jal draw_column
+    
+    li $a0, 4  #starting column
+    li $a1, 8   # starting row
     
     #draw three gem column at x, y pos
     jal draw_column
