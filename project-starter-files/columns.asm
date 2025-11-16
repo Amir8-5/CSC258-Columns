@@ -2,7 +2,7 @@
 # This file contains our implementation of Columns.
 #
 # Student 1: Muhammad Hashmi, 1011147910
-# Student 2: Name, Student Number (if applicable)
+# Student 2: Amir Diba, 1011228814
 #
 # We assert that the code submitted here is entirely our own 
 # creation, and will indicate otherwise when it is not.
