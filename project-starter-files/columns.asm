@@ -43,6 +43,7 @@ ADDR_KBRD:
 main:
     jal clear_screen
     jal draw_walls
+    j game_loop
     
     li $v0, 10
     syscall
@@ -118,8 +119,8 @@ draw_walls:
     addi $sp, $sp, 12
     
     jr $ra
-
-
+ 
+    
 game_loop:
     # 1a. Check if key has been pressed
     # 1b. Check which key has been pressed
@@ -129,4 +130,58 @@ game_loop:
 	# 4. Sleep
 
     # 5. Go back to Step 1
+    lw $t0, ADDR_KBRD               # $t0 = base address for keyboard
+    lw $t8, 0($t0)                  # Load first word from keyboard
+    beq $t8, 1, keyboard_input      # If first word 1, key is pressed
+    j game_loop
+
+    keyboard_input:                     # A key is pressed
+        lw $a0, 4($t0)                  # Load second word from keyboard
+        beq $a0, 0x71, respond_to_Q     # Check if the key q was pressed
+        beq $a0, 0x64, respond_to_D
+        beq $a0, 0x61, respond_to_A
+        beq $a0, 0x77, respond_to_W
+        beq $a0, 0x73, respond_to_S
+    
+        li $v0, 1                       # ask system to print $a0
+        syscall
+        j game_loop
+        
+    
+    respond_to_Q:
+    	li $v0, 10                      # Quit gracefully
+    	syscall
+    
+    respond_to_D:
+        addi $s0, $s0, 1
+        j game_loop
+    
+    respond_to_A:
+        addi $s0, $s0, -1
+        j game_loop
+        
+    respond_to_W:
+    # this is a problem of switching 3 addresses i think
+    # lets say a = 1, b = 2, c=3
+    # you have to assign a=c, b=a, c=b in parallel everytime w is pressed
+    # what you could do is make two temp variables (registers in this case)
+    # temp_c = c_0, temp_b = b_0, so you would do b = a, a = temp_c, c = temp b 
+    # i thinkkkk
+    # SO imagine it like this
+    # $s1 = a (top)
+    # $s3 = b (middle)
+    # $s4 = c (bottom)
+    # $t0, $t1 = temps
+    #move $t0, $s4   # temp_c = old c
+    #move $t1, $s3   # temp_b = old b
+    #move $s3, $s1   # b = a
+    #move $s1, $t0   # a = temp_c
+    #move $s4, $t1   # c = temp_b
+    
+    respond_to_S:
+        addi $s1, $s1, 1
+        j game_loop
+    
+    
+	
     j game_loop
