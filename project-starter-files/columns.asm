@@ -111,6 +111,8 @@ game_loop:
 
 #Function definitions
 
+
+
 #a0 is the row
 # a1 is the column
 # the result gives the memory address of the pixel u want to draw at
@@ -278,7 +280,22 @@ respond_to_S:
     #
     j game_loop
 
+#shuffles gem colors pushing from top to bottom wrapping around
 respond_to_W:
+    lw $t0, curr_gem_0
+    lw $t1, curr_gem_1
+    lw $t2, curr_gem_2
+    
+    sw $t2, curr_gem_0
+    sw $t0 curr_gem_1
+    sw $t1, curr_gem_2
+    
+    jal draw_screen 
+    j game_loop
+
+
+draw_screen:
+
 # this is a problem of switching 3 addresses i think
 # lets say a = 1, b = 2, c=3
 # you have to assign a=c, b=a, c=b in parallel everytime w is pressed
