@@ -20,6 +20,7 @@
 # Immutable Data
 
 gray: .word 0x707070
+BLACK: .word 0x000000
 
 ##############################################################################
 # The address of the bitmap display. Don't forget to connect it!
@@ -55,25 +56,8 @@ main:
     # Initialize the game
  
     jal draw_walls
-    
-    # load a0 = x value and a1= y value to prepare to draw column
-    li $a0, 2  #starting column
-    li $a1, 1   # starting row
-    
-    #draw three gem column at x, y pos
-    jal draw_column
-    
-    li $a0, 4  #starting column
-    li $a1, 4   # starting row
-    
-    #draw three gem column at x, y pos
-    jal draw_column
-    
-    li $a0, 4  #starting column
-    li $a1, 8   # starting row
-    
-    #draw three gem column at x, y pos
-    jal draw_column
+    jal load_default_column
+    jal draw_screen_helper
     
     j game_loop
     li $v0, 10
@@ -111,9 +95,32 @@ game_loop:
 
 #Function definitions
 
+
+
 #a0 is the row
 # a1 is the column
 # the result gives the memory address of the pixel u want to draw at
+
+#loads the default starting values of the column into the global varibales
+load_default_column:
+    addi $sp, $sp, -4
+    sw, $ra, 0($sp)
+    
+    # store color 
+    jal get_random_color_value
+    sw $v0, curr_gem_0
+    
+    jal get_random_color_value
+    sw $v0, curr_gem_1
+    
+    jal get_random_color_value
+    sw $v0, curr_gem_2
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+
 get_address:
     li $v0, 0x10008000
     sll $t0, $a0, 5
@@ -173,60 +180,56 @@ draw_walls:
     jr $ra
     
     
-# draws a column based on starting x (a0) and y (a1) with a three gem height and random colors
+# draws a column based on starting x (curr_x) and y (curr_y) with a curr_gem colors
 draw_column:
     #store return address
     addi $sp, $sp, -4
     sw $ra, 0($sp)
     
-    #saving x, y coordinates
-    move $s0, $a0
-    move $s1, $a1
+    #saving curr values into saved
+    lw $s0, curr_column_x
+    lw $s1, curr_column_y
+    lw $s2, curr_gem_0
+    lw $s3, curr_gem_1
+    lw $s4, curr_gem_2
     
-    # starting loop counter with s4 = index
-    li $s4, 0
-
-#loops until $t0 reaches >= 3
-draw_column_loop:
-    bge $s4, 3, draw_column_end 
-    
-    # get random color index
-    jal get_random_color_index
-    move $s2, $v0
-    
-    # load random color value
-    move $a0, $s2
-    jal load_random_color_value
-    move $s3, $v0
-    
-    # calculate new y based on loop index s4=i
-    add $a2, $s1, $s4
-    
-    # draw a pixel at current a0=color, a1=x, a2=y
-    move $a0, $s3
+    # drawing top gme
     move $a1, $s0
-    
+    move $a2, $s1
+    move $a0, $s2
     jal draw_unit
     
-    # increment loop index 
-    addi $s4, $s4, 1
-    j draw_column_loop
-
-# wraps up the function
-draw_column_end:
-    #restore ra and return
+    # drawing middle gme
+    move $a1, $s0
+    addi $a2, $s1, 1 # moving one Y down
+    move $a0, $s3
+    jal draw_unit
+    
+    # drawing bottom gme
+    move $a1, $s0
+    addi $a2, $s1, 2 # move 2 Y down
+    move $a0, $s4
+    jal draw_unit
+    
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
-    
 
-# Returns a random integer between 0-5 stores it at $v0
-    get_random_color_index:
+# Returns a color value from 6 options randomly and stores it at $v0
+    get_random_color_value:
+        addi $sp, $sp, -4
+        sw $ra, 0($sp)
+        
         li $v0, 42
         li $a0, 0
         li $a1, 6 # Max value (exclusive)
         syscall
-        move $v0, $a0 # put the random number into v0
+        
+        # load the color vlue
+        jal load_random_color_value
+        
+        lw $ra, 0($sp)
+        addi $sp, $sp, 4
         jr $ra
         
 #Loads the color value based on random index stored in a0
@@ -278,7 +281,127 @@ respond_to_S:
     #
     j game_loop
 
+#shuffles gem colors pushing from top to bottom wrapping around
+# calls draw_screen so uses (a0, a1, a2, a3, t0)
 respond_to_W:
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_2
+    lw $a3, curr_gem_0
+    lw $t0, curr_gem_1
+    
+    jal draw_screen 
+    j game_loop
+
+# erases old columns, redraws column with the updated position (new_x, new_y, top_color, mid_color, bot_color)
+# addresses (a0, a1 a2, a3, t0)
+draw_screen:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    #save arguments to stack
+    addi $sp, $sp, -20      # 5 4 byte values
+    sw $a0, 0($sp)          # new_x
+    sw $a1, 4($sp)          # new_x
+    sw $a2, 8($sp)          # new_x
+    sw $a3, 12($sp)          # new_x
+    sw $t0, 16($sp)          # new_x
+    
+    #erasing old columns
+    lw $s0, curr_column_x
+    lw $s1, curr_column_y #old x, y vals
+    
+    move $a0, $s0
+    move $a1, $s1
+    jal erase_column 
+    
+    # update the global curr variables with new values
+    lw $s2, 0($sp)      # s2 = new x
+    lw $s3, 4($sp)      # s2 = new x
+    lw $s4, 8($sp)      # s2 = new x
+    lw $s5, 12($sp)      # s2 = new x
+    lw $s6, 16($sp)      # s2 = new x
+    
+    sw $s2, curr_column_x
+    sw $s3, curr_column_y
+    sw $s4, curr_gem_0
+    sw $s5, curr_gem_1
+    sw $s6, curr_gem_2
+    
+    jal draw_screen_helper
+    
+    addi $sp, $sp, 20
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+#erases old columns
+# erases starting form (x, y) = (a0, a1)
+erase_column:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    # erase top gem
+    move $t0, $a0 # x local saved
+    move $t1, $a1 # y local saved
+    
+    move $a0, $t0
+    move $a1, $t1
+    jal erase_unit
+    
+    # erase middle gem
+    addi $t1, $t1 , 1
+    move $a0, $t0
+    move $a1, $t1
+    jal erase_unit
+    
+    # erase bottom gem
+    addi $t1, $t1 , 1
+    move $a0, $t0
+    move $a1, $t1
+    jal erase_unit
+    
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+#erases the unit at (x, y) = (a0, a1)
+# calls draw unit so uses a2 slot
+erase_unit:
+    addi, $sp, $sp, -8
+    sw $ra, 0($sp)
+    sw $a1, 4($sp)  # save y in stack because a1 is going to be overwritten
+    
+    # draw unit args (color, x, y) = (a0, a1, a2)
+    # shift y to a2
+    move $t0, $a0
+    move $t1, $a1
+    
+    lw $a0, BLACK
+    move $a1, $t0
+    move $a2, $t1
+    
+    jal draw_unit
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 8
+    jr $ra
+
+# draws the screen with new values
+draw_screen_helper:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    #redraw all parts of the game
+    jal draw_column
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+    
+
+
 # this is a problem of switching 3 addresses i think
 # lets say a = 1, b = 2, c=3
 # you have to assign a=c, b=a, c=b in parallel everytime w is pressed
