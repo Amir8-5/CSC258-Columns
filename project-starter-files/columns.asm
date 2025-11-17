@@ -20,7 +20,7 @@
 # Immutable Data
 
 gray: .word 0x707070
-
+BLACK: .word 0x000000
 ##############################################################################
 # The address of the bitmap display. Don't forget to connect it!
 ADDR_DSPL:
@@ -44,7 +44,13 @@ curr_column_x: .word 4
 curr_column_y: .word 1       
 curr_gem_0: .word 0          
 curr_gem_1: .word 1          
-curr_gem_2: .word 2          
+curr_gem_2: .word 2       
+
+#each index stores the gem color
+#this will help later
+game_board: .space 832 #(26*8 *4)
+
+empty_cell: .word -1 #im thinking we make empty blocks into -1
 ##############################################################################
 # Code
 ##############################################################################
@@ -53,27 +59,23 @@ curr_gem_2: .word 2
     # Run the game.
 main:
     # Initialize the game
+    
+    #this initializes the game board
+    #ive set every spot to -1 which indicates an empty cell
+    #I think ive also added collision detection in the respond_to_(A,S,D) by checking if the value will overflow the boundaries or not.
+    la $t0, game_board
+    li $t1, 208
+    li $t2, -1
+    init_loop:
+        sw $t2, 0($t0)
+        addi $t0, $t0, 4
+        addi $t1, $t1, -1
+        bnez $t1, init_loop
  
     jal draw_walls
     
-    # load a0 = x value and a1= y value to prepare to draw column
-    li $a0, 2  #starting column
-    li $a1, 1   # starting row
-    
-    #draw three gem column at x, y pos
-    jal draw_column
-    
-    li $a0, 4  #starting column
-    li $a1, 4   # starting row
-    
-    #draw three gem column at x, y pos
-    jal draw_column
-    
-    li $a0, 4  #starting column
-    li $a1, 8   # starting row
-    
-    #draw three gem column at x, y pos
-    jal draw_column
+    jal load_default_column
+    jal draw_screen_helper
     
     j game_loop
     li $v0, 10
@@ -114,6 +116,27 @@ game_loop:
 #a0 is the row
 # a1 is the column
 # the result gives the memory address of the pixel u want to draw at
+
+#loads the default starting values of the column into the global varibales
+load_default_column:
+    addi $sp, $sp, -4
+    sw, $ra, 0($sp)
+
+    # store color 
+    jal get_random_color_value
+    sw $v0, curr_gem_0
+
+    jal get_random_color_value
+    sw $v0, curr_gem_1
+
+    jal get_random_color_value
+    sw $v0, curr_gem_2
+
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+
 get_address:
     li $v0, 0x10008000
     sll $t0, $a0, 5
@@ -173,15 +196,18 @@ draw_walls:
     jr $ra
     
     
-# draws a column based on starting x (a0) and y (a1) with a three gem height and random colors
+# draws a column based on starting x (curr_x) and y (curr_y) with a curr_gem colors
 draw_column:
     #store return address
     addi $sp, $sp, -4
     sw $ra, 0($sp)
     
-    #saving x, y coordinates
-    move $s0, $a0
-    move $s1, $a1
+    #saving curr values into saved
+    lw $s0, curr_column_x
+    lw $s1, curr_column_y
+    lw $s2, curr_gem_0
+    lw $s3, curr_gem_1
+    lw $s4, curr_gem_2
     
     # starting loop counter with s4 = index
     li $s4, 0
@@ -263,20 +289,49 @@ respond_to_Q:
   syscall
 
 respond_to_D:
-    addi $s0, $s0, 1
-    #
+    lw $t1, curr_column_x
+    addi $t1, $t1, 1
+    bgt $t1, 6, game_loop
+    sw $t1, curr_column_x
+    
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    #jal draw_screen
     j game_loop
-
+    
+    
+    
 respond_to_A:
-    addi $s0, $s0, -1
-    #
+    lw $t1, curr_column_x
+    addi $t1, $t1, -1
+    blt $t1, 1, game_loop
+    sw $t1, curr_column_x
+    
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    #jal draw_screen
     j game_loop
-
-
+    
 respond_to_S:
-    addi $s1, $s1, 1
-    #
+    lw $t1, curr_column_y
+    addi $t1, $t1, 1
+    bgt $t1, 22, game_loop
+    sw $t1, curr_column_y
+ 
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    #jal draw_screen
     j game_loop
+    
 
 respond_to_W:
 # this is a problem of switching 3 addresses i think
