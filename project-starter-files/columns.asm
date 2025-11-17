@@ -39,6 +39,12 @@ GEM_COLOR_2: .word 0x0000FF #2: blue
 GEM_COLOR_3: .word 0x800080 #3: purple
 GEM_COLOR_4: .word 0xFFFF00 #4: yellow
 GEM_COLOR_5: .word 0xFF8000 #5: orange
+
+current_column_x: .word 4       # x position of falling column
+current_column_y: .word 1       # y position (top gem)
+current_gem_0: .word 0          # top gem color index
+current_gem_1: .word 1          # middle gem color index
+current_gem_2: .word 2          # bottom gem color index
 ##############################################################################
 # Code
 ##############################################################################
