@@ -45,7 +45,13 @@ curr_column_x: .word 4
 curr_column_y: .word 1       
 curr_gem_0: .word 0          
 curr_gem_1: .word 1          
-curr_gem_2: .word 2          
+curr_gem_2: .word 2       
+
+#each index stores the gem color
+#this will help later
+game_board: .space 832 #(26*8 *4)
+
+empty_cell: .word -1 #im thinking we make empty blocks into -1
 ##############################################################################
 # Code
 ##############################################################################
@@ -54,6 +60,18 @@ curr_gem_2: .word 2
     # Run the game.
 main:
     # Initialize the game
+    
+    #this initializes the game board
+    #ive set every spot to -1 which indicates an empty cell
+    #I think ive also added collision detection in the respond_to_(A,S,D) by checking if the value will overflow the boundaries or not.
+    la $t0, game_board
+    li $t1, 208
+    li $t2, -1
+    init_loop:
+        sw $t2, 0($t0)
+        addi $t0, $t0, 4
+        addi $t1, $t1, -1
+        bnez $t1, init_loop
  
     jal draw_walls
     jal load_default_column
@@ -266,20 +284,49 @@ respond_to_Q:
   syscall
 
 respond_to_D:
-    addi $s0, $s0, 1
-    #
+    lw $t1, curr_column_x
+    addi $t1, $t1, 1
+    bgt $t1, 6, game_loop
+    sw $t1, curr_column_x
+    
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    #jal draw_screen
     j game_loop
-
+    
+    
+    
 respond_to_A:
-    addi $s0, $s0, -1
-    #
+    lw $t1, curr_column_x
+    addi $t1, $t1, -1
+    blt $t1, 1, game_loop
+    sw $t1, curr_column_x
+    
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    #jal draw_screen
     j game_loop
-
-
+    
 respond_to_S:
-    addi $s1, $s1, 1
-    #
+    lw $t1, curr_column_y
+    addi $t1, $t1, 1
+    bgt $t1, 22, game_loop
+    sw $t1, curr_column_y
+ 
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    #jal draw_screen
     j game_loop
+    
 
 #shuffles gem colors pushing from top to bottom wrapping around
 # calls draw_screen so uses (a0, a1, a2, a3, t0)
