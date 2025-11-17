@@ -197,6 +197,65 @@ draw_walls:
     
     jr $ra
     
+        
+respond_to_Q:
+  li $v0, 10                      # Quit gracefully
+  syscall
+
+respond_to_D:
+    lw $t1, curr_column_x
+    addi $t1, $t1, 1
+    bgt $t1, 6, game_loop
+    
+    move $a0, $t1
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    jal draw_screen
+    j game_loop
+    
+    
+    
+respond_to_A:
+    lw $t1, curr_column_x
+    addi $t1, $t1, -1
+    move $t2, $t1
+    blt $t1, 1, game_loop
+    
+    move $a0, $t2
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    jal draw_screen
+    j game_loop
+    
+respond_to_S:
+    lw $t1, curr_column_y
+    addi $t1, $t1, 1
+    bgt $t1, 22, game_loop
+ 
+    lw $a0, curr_column_x
+    move $a1, $t1
+    lw $a2, curr_gem_0
+    lw $a3, curr_gem_1
+    lw $t0, curr_gem_2
+    jal draw_screen
+    j game_loop
+    
+
+#shuffles gem colors pushing from top to bottom wrapping around
+# calls draw_screen so uses (a0, a1, a2, a3, t0)
+respond_to_W:
+    lw $a0, curr_column_x
+    lw $a1, curr_column_y
+    lw $a2, curr_gem_2
+    lw $a3, curr_gem_0
+    lw $t0, curr_gem_1
+    
+    jal draw_screen 
+    j game_loop
     
 # draws a column based on starting x (curr_x) and y (curr_y) with a curr_gem colors
 draw_column:
@@ -268,7 +327,7 @@ draw_column:
         mul $t1, $a2, $t6   # y * width
         add $t1, $t1, $a1   # (y * width) + x
         
-        mul $t1, $t1, $t7   # mul by offset
+        sll $t1, $t1, 2   # mul by offset
         
         la $t0, ADDR_DSPL
         lw $t0, 0($t0)   #base add
@@ -278,67 +337,6 @@ draw_column:
         sw $a0, 0($t4)      # store the color value a0 at final address
         
         jr $ra
-        
-respond_to_Q:
-  li $v0, 10                      # Quit gracefully
-  syscall
-
-respond_to_D:
-    lw $t1, curr_column_x
-    addi $t1, $t1, 1
-    bgt $t1, 6, game_loop
-    sw $t1, curr_column_x
-    
-    lw $a0, curr_column_x
-    lw $a1, curr_column_y
-    lw $a2, curr_gem_0
-    lw $a3, curr_gem_1
-    lw $t0, curr_gem_2
-    #jal draw_screen
-    j game_loop
-    
-    
-    
-respond_to_A:
-    lw $t1, curr_column_x
-    addi $t1, $t1, -1
-    blt $t1, 1, game_loop
-    sw $t1, curr_column_x
-    
-    lw $a0, curr_column_x
-    lw $a1, curr_column_y
-    lw $a2, curr_gem_0
-    lw $a3, curr_gem_1
-    lw $t0, curr_gem_2
-    #jal draw_screen
-    j game_loop
-    
-respond_to_S:
-    lw $t1, curr_column_y
-    addi $t1, $t1, 1
-    bgt $t1, 22, game_loop
-    sw $t1, curr_column_y
- 
-    lw $a0, curr_column_x
-    lw $a1, curr_column_y
-    lw $a2, curr_gem_0
-    lw $a3, curr_gem_1
-    lw $t0, curr_gem_2
-    #jal draw_screen
-    j game_loop
-    
-
-#shuffles gem colors pushing from top to bottom wrapping around
-# calls draw_screen so uses (a0, a1, a2, a3, t0)
-respond_to_W:
-    lw $a0, curr_column_x
-    lw $a1, curr_column_y
-    lw $a2, curr_gem_2
-    lw $a3, curr_gem_0
-    lw $t0, curr_gem_1
-    
-    jal draw_screen 
-    j game_loop
 
 # erases old columns, redraws column with the updated position (new_x, new_y, top_color, mid_color, bot_color)
 # addresses (a0, a1 a2, a3, t0)
@@ -349,10 +347,10 @@ draw_screen:
     #save arguments to stack
     addi $sp, $sp, -20      # 5 4 byte values
     sw $a0, 0($sp)          # new_x
-    sw $a1, 4($sp)          # new_x
-    sw $a2, 8($sp)          # new_x
-    sw $a3, 12($sp)          # new_x
-    sw $t0, 16($sp)          # new_x
+    sw $a1, 4($sp)          # new_y
+    sw $a2, 8($sp)          # new_gem_0
+    sw $a3, 12($sp)          # new_gem_1
+    sw $t0, 16($sp)          # new_gem_2
     
     #erasing old columns
     lw $s0, curr_column_x
@@ -364,10 +362,10 @@ draw_screen:
     
     # update the global curr variables with new values
     lw $s2, 0($sp)      # s2 = new x
-    lw $s3, 4($sp)      # s2 = new x
-    lw $s4, 8($sp)      # s2 = new x
-    lw $s5, 12($sp)      # s2 = new x
-    lw $s6, 16($sp)      # s2 = new x
+    lw $s3, 4($sp)      # s2 = new y
+    lw $s4, 8($sp)      # s2 = new gem0
+    lw $s5, 12($sp)      # s2 = new gem1
+    lw $s6, 16($sp)      # s2 = new x=gem2
     
     sw $s2, curr_column_x
     sw $s3, curr_column_y
@@ -387,28 +385,29 @@ draw_screen:
 erase_column:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
+    addi $sp, $sp, -8
+    sw $a0, 0($sp)
+    sw $a1, 4($sp)
     
-    # erase top gem
-    move $t0, $a0 # x local saved
-    move $t1, $a1 # y local saved
     
-    move $a0, $t0
-    move $a1, $t1
+    lw $a0, 0($sp)
+    lw $a1, 4($sp)
     jal erase_unit
     
     # erase middle gem
-    addi $t1, $t1 , 1
-    move $a0, $t0
-    move $a1, $t1
+    lw $t0, 4($sp)
+    lw $a0, 0($sp)
+    addi $a1, $t0, 1
     jal erase_unit
     
     # erase bottom gem
-    addi $t1, $t1 , 1
-    move $a0, $t0
-    move $a1, $t1
+    lw $t0, 4($sp)
+    lw $a0, 0($sp)
+    addi $a1, $t0, 2
     jal erase_unit
     
     
+    addi $sp, $sp, 8
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
@@ -427,7 +426,7 @@ erase_unit:
     
     lw $a0, BLACK
     move $a1, $t0
-    move $a2, $t1
+    lw $a2, 4($sp)
     
     jal draw_unit
     
