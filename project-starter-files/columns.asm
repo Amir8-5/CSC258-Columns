@@ -113,7 +113,47 @@ game_loop:
 
 #Function definitions
 
+####ARRAY FUNCTIONS######
+#
+#the arguments are a0, a1, which are row, column
+#if you wanna understand how this works lmk
+get_offset_of_board:
+    li $t0, 8
+    mul $t1, $a0, $t0 #so im first multiplying the current row by 8
+    add $t1, $t1, $a1 #then im adding the current column to to the result (r * 8) + col
+    sll $v0, $t1, 2   #shift twice multiplies it by 4. (4 bytes per word)
+    jr $ra
 
+# Reads the gem color at board[row][col]
+read_cell_from_array:
+    add $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    jal get_offset_of_board
+    la $t8, game_board
+    add $t8, $t8, $v0 #i think this gets the address of the cell because v0 has the offset and gameboard is the adress sooo
+    lw $v0, 0($t8)
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp,4
+    jr $ra
+    
+#a0, a1 row, column, a2 is the value to store.
+store_in_cell:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    move $t9, $a2              # Save value
+    jal get_offset_of_board   # Get index in $v0
+    la $t8, game_board         # Use $t8 instead of $t0!
+    add $t8, $t8, $v0          # Add offset
+    sw $t9, 0($t8)             # Store value
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+########################
 
 #a0 is the row
 # a1 is the column
@@ -122,22 +162,35 @@ game_loop:
 #loads the default starting values of the column into the global varibales
 load_default_column:
     addi $sp, $sp, -4
-    sw, $ra, 0($sp)
+    sw $ra, 0($sp)
     
-    # store color 
-    jal get_random_color_value
-    sw $v0, curr_gem_0
+    # Get random index (0-5) for gem 0
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    move $t0, $a0
+    sw $t0, curr_gem_0
     
-    jal get_random_color_value
-    sw $v0, curr_gem_1
+    # Get random index (0-5) for gem 1
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    move $t0, $a0
+    sw $t0, curr_gem_1
     
-    jal get_random_color_value
-    sw $v0, curr_gem_2
+    # Get random index (0-5) for gem 2
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    move $t0, $a0
+    sw $t0, curr_gem_2
     
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
-
 
 get_address:
     li $v0, 0x10008000
@@ -202,193 +255,298 @@ respond_to_Q:
   li $v0, 10                      # Quit gracefully
   syscall
 
-respond_to_D:
-    lw $t1, curr_column_x
+respond_to_S:
+    jal check_collision_down
+    beq $v0, 0, lock_and_new_column
+    
+    lw $t1, curr_column_y
     addi $t1, $t1, 1
-    bgt $t1, 6, game_loop
+    lw $a0, curr_column_x
+    move $a1, $t1
+    jal draw_screen
+    j game_loop
+
+respond_to_A:
+    jal check_collision_left
+    beq $v0, 0, game_loop
+    
+    lw $t1, curr_column_x
+    addi $t1, $t1, -1
     
     move $a0, $t1
     lw $a1, curr_column_y
-    lw $a2, curr_gem_0
-    lw $a3, curr_gem_1
-    lw $t0, curr_gem_2
     jal draw_screen
     j game_loop
-    
-    
-    
-respond_to_A:
-    lw $t1, curr_column_x
-    addi $t1, $t1, -1
-    move $t2, $t1
-    blt $t1, 1, game_loop
-    
-    move $a0, $t2
-    lw $a1, curr_column_y
-    lw $a2, curr_gem_0
-    lw $a3, curr_gem_1
-    lw $t0, curr_gem_2
-    jal draw_screen
-    j game_loop
-    
-respond_to_S:
-    lw $t1, curr_column_y
-    addi $t1, $t1, 1
-    bgt $t1, 22, game_loop
- 
-    lw $a0, curr_column_x
-    move $a1, $t1
-    lw $a2, curr_gem_0
-    lw $a3, curr_gem_1
-    lw $t0, curr_gem_2
-    jal draw_screen
-    j game_loop
-    
 
-#shuffles gem colors pushing from top to bottom wrapping around
-# calls draw_screen so uses (a0, a1, a2, a3, t0)
+respond_to_D:
+    jal check_collision_right
+    beq $v0, 0, game_loop
+    
+    lw $t1, curr_column_x
+    addi $t1, $t1, 1
+    
+    move $a0, $t1
+    lw $a1, curr_column_y
+    jal draw_screen
+    j game_loop
+
 respond_to_W:
+    # Rotate gems
+    lw $t0, curr_gem_0
+    lw $t1, curr_gem_1
+    lw $t2, curr_gem_2
+    
+    sw $t2, curr_gem_0  # gem2 -> gem0
+    sw $t0, curr_gem_1  # gem0 -> gem1
+    sw $t1, curr_gem_2  # gem1 -> gem2
+    
     lw $a0, curr_column_x
     lw $a1, curr_column_y
-    lw $a2, curr_gem_2
-    lw $a3, curr_gem_0
-    lw $t0, curr_gem_1
-    
-    jal draw_screen 
+    jal draw_screen
     j game_loop
+
+lock_and_new_column:
+    jal set_column_in_the_board
     
-# draws a column based on starting x (curr_x) and y (curr_y) with a curr_gem colors
-draw_column:
-    #store return address
+    li $t0, 4
+    sw $t0, curr_column_x
+    li $t0, 1
+    sw $t0, curr_column_y
+    jal load_default_column
+    jal draw_screen_helper
+    j game_loop
+
+set_column_in_the_board:
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    lw $s0, curr_column_x
+    lw $s1, curr_column_y
+    
+    #gem 0
+    move $a0, $s1
+    move $a1, $s0
+    lw $a2, curr_gem_0
+    jal store_in_cell
+    
+    #gem 1 
+    addi $a0, $s1, 1
+    move $a1, $s0
+    lw $a2, curr_gem_1
+    jal store_in_cell
+    
+    #gem 2 
+    addi $a0, $s1, 2
+    move $a1, $s0
+    lw $a2, curr_gem_2
+    jal store_in_cell
+    
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
+    jr $ra
+    
+check_collision_down:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
     
-    #saving curr values into saved
+    lw $a0, curr_column_y
+    addi $a0, $a0, 3
+    
+    bge $a0, 25, collision_detected #hits a gray wall 
+    
+    lw $a1, curr_column_x
+    jal read_cell_from_array
+    lw $t1, empty_cell
+    bne $v0, $t1, collision_detected
+    
+    li $v0, 1
+    j check_collision_done
+
+check_collision_right:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $t0, curr_column_x
+    addi $t0, $t0, 1
+    
+    bge $t0, 7, collision_detected
+    
+    lw $t1, curr_column_y
+
+    move $a0, $t1
+    move $a1, $t0
+    jal read_cell_from_array
+    lw $t2, empty_cell
+    bne $v0, $t2, collision_detected
+    
+    lw $t1, curr_column_y
+    addi $a0, $t1, 1
+    lw $t0, curr_column_x
+    addi $a1, $t0, 1
+    jal read_cell_from_array
+    lw $t2, empty_cell
+    bne $v0, $t2, collision_detected
+    
+    lw $t1, curr_column_y
+    addi $a0, $t1, 2
+    lw $t0, curr_column_x
+    addi $a1, $t0, 1
+    jal read_cell_from_array
+    lw $t2, empty_cell
+    bne $v0, $t2, collision_detected
+    
+    li $v0, 1
+    j check_collision_done
+
+check_collision_left:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $t0, curr_column_x
+    addi $t0, $t0, -1
+    
+    ble $t0, 0, collision_detected
+    
+    lw $t1, curr_column_y
+
+    move $a0, $t1
+    move $a1, $t0
+    jal read_cell_from_array
+    lw $t2, empty_cell
+    bne $v0, $t2, collision_detected
+    
+    lw $t1, curr_column_y
+    addi $a0, $t1, 1
+    lw $t0, curr_column_x
+    addi $a1, $t0, -1
+    jal read_cell_from_array
+    lw $t2, empty_cell
+    bne $v0, $t2, collision_detected
+    
+    lw $t1, curr_column_y
+    addi $a0, $t1, 2
+    lw $t0, curr_column_x
+    addi $a1, $t0, -1
+    jal read_cell_from_array
+    lw $t2, empty_cell
+    bne $v0, $t2, collision_detected
+    
+    li $v0, 1
+    j check_collision_done
+    
+collision_detected:
+    li $v0, 0
+    
+check_collision_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+draw_column:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
     lw $s0, curr_column_x
     lw $s1, curr_column_y
-    lw $s2, curr_gem_0
+    lw $s2, curr_gem_0      
     lw $s3, curr_gem_1
     lw $s4, curr_gem_2
     
-    # drawing top gme
+    # Convert index to color for gem 0
+    move $a0, $s2
+    jal load_random_color_value
+    move $a0, $v0           
     move $a1, $s0
     move $a2, $s1
-    move $a0, $s2
     jal draw_unit
     
-    # drawing middle gme
-    move $a1, $s0
-    addi $a2, $s1, 1 # moving one Y down
+    # Convert index to color for gem 1
     move $a0, $s3
+    jal load_random_color_value
+    move $a0, $v0
+    move $a1, $s0
+    addi $a2, $s1, 1
     jal draw_unit
     
-    # drawing bottom gme
-    move $a1, $s0
-    addi $a2, $s1, 2 # move 2 Y down
+    # Convert index to color for gem 2
     move $a0, $s4
+    jal load_random_color_value
+    move $a0, $v0
+    move $a1, $s0
+    addi $a2, $s1, 2
     jal draw_unit
     
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
 
-# Returns a color value from 6 options randomly and stores it at $v0
-    get_random_color_value:
-        addi $sp, $sp, -4
-        sw $ra, 0($sp)
+load_random_color_value:
+    la $t0, GEM_COLOR_0
+    sll $t1, $a0, 2
+    add $t2, $t1, $t0
+    lw $v0, 0($t2)
+    jr $ra
         
-        li $v0, 42
-        li $a0, 0
-        li $a1, 6 # Max value (exclusive)
-        syscall
-        
-        # load the color vlue
-        jal load_random_color_value
-        
-        lw $ra, 0($sp)
-        addi $sp, $sp, 4
-        jr $ra
-        
-#Loads the color value based on random index stored in a0
-# the value is stored v0
-    load_random_color_value:
-        la $t0, GEM_COLOR_0
-        sll $t1, $a0, 2
-        add $t2, $t1, $t0
-        lw $v0, 0($t2)
-        jr $ra
-        
-# draws a pixel given color_value (a0), x (a1), y (a2)
-    draw_unit:
-        #constants
-        li $t6, 32  #display width
-        li $t7, 4   # bytes per unit
-        
-        mul $t1, $a2, $t6   # y * width
-        add $t1, $t1, $a1   # (y * width) + x
-        
-        sll $t1, $t1, 2   # mul by offset
-        
-        la $t0, ADDR_DSPL
-        lw $t0, 0($t0)   #base add
-        
-        add $t4, $t0, $t1   # final = base + offset
-        
-        sw $a0, 0($t4)      # store the color value a0 at final address
-        
-        jr $ra
+draw_unit:
+    #constants
+    li $t6, 32  #display width
+    li $t7, 4   # bytes per unit
+    
+    mul $t1, $a2, $t6   # y * width
+    add $t1, $t1, $a1   # (y * width) + x
+    
+    sll $t1, $t1, 2   # mul by offset
+    
+    la $t0, ADDR_DSPL
+    lw $t0, 0($t0)   #base add
+    
+    add $t4, $t0, $t1   # final = base + offset
+    
+    sw $a0, 0($t4)      # store the color value a0 at final address
+    
+    jr $ra
 
-# erases old columns, redraws column with the updated position (new_x, new_y, top_color, mid_color, bot_color)
-# addresses (a0, a1 a2, a3, t0)
 draw_screen:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
     
-    #save arguments to stack
-    addi $sp, $sp, -20      # 5 4 byte values
+    #save arguments
+    addi $sp, $sp, -8
     sw $a0, 0($sp)          # new_x
     sw $a1, 4($sp)          # new_y
-    sw $a2, 8($sp)          # new_gem_0
-    sw $a3, 12($sp)          # new_gem_1
-    sw $t0, 16($sp)          # new_gem_2
     
     #erasing old columns
     lw $s0, curr_column_x
-    lw $s1, curr_column_y #old x, y vals
+    lw $s1, curr_column_y
     
     move $a0, $s0
     move $a1, $s1
     jal erase_column 
     
-    # update the global curr variables with new values
-    lw $s2, 0($sp)      # s2 = new x
-    lw $s3, 4($sp)      # s2 = new y
-    lw $s4, 8($sp)      # s2 = new gem0
-    lw $s5, 12($sp)      # s2 = new gem1
-    lw $s6, 16($sp)      # s2 = new x=gem2
+    # Update position
+    lw $s2, 0($sp)
+    lw $s3, 4($sp)
     
     sw $s2, curr_column_x
     sw $s3, curr_column_y
-    sw $s4, curr_gem_0
-    sw $s5, curr_gem_1
-    sw $s6, curr_gem_2
     
     jal draw_screen_helper
     
-    addi $sp, $sp, 20
+    addi $sp, $sp, 8
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
 
-#erases old columns
-# erases starting form (x, y) = (a0, a1)
 erase_column:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
     addi $sp, $sp, -8
     sw $a0, 0($sp)
     sw $a1, 4($sp)
-    
     
     lw $a0, 0($sp)
     lw $a1, 4($sp)
@@ -406,16 +564,13 @@ erase_column:
     addi $a1, $t0, 2
     jal erase_unit
     
-    
     addi $sp, $sp, 8
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
 
-#erases the unit at (x, y) = (a0, a1)
-# calls draw unit so uses a2 slot
 erase_unit:
-    addi, $sp, $sp, -8
+    addi $sp, $sp, -8
     sw $ra, 0($sp)
     sw $a1, 4($sp)  # save y in stack because a1 is going to be overwritten
     
@@ -434,7 +589,6 @@ erase_unit:
     addi $sp, $sp, 8
     jr $ra
 
-# draws the screen with new values
 draw_screen_helper:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
@@ -445,22 +599,3 @@ draw_screen_helper:
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     jr $ra
-    
-
-
-# this is a problem of switching 3 addresses i think
-# lets say a = 1, b = 2, c=3
-# you have to assign a=c, b=a, c=b in parallel everytime w is pressed
-# what you could do is make two temp variables (registers in this case)
-# temp_c = c_0, temp_b = b_0, so you would do b = a, a = temp_c, c = temp b 
-# i thinkkkk
-# SO imagine it like this
-# $s1 = a (top)
-# $s3 = b (middle)
-# $s4 = c (bottom)
-# $t0, $t1 = temps
-#move $t0, $s4   # temp_c = old c
-#move $t1, $s3   # temp_b = old b
-#move $s3, $s1   # b = a
-#move $s1, $t0   # a = temp_c
-#move $s4, $t1   # c = temp_b
