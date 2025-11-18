@@ -50,6 +50,7 @@ curr_gem_2: .word 2
 #each index stores the gem color
 #this will help later
 game_board: .space 832 #(26*8 *4)
+match_map: .space 832
 
 empty_cell: .word -1 #im thinking we make empty blocks into -1
 ##############################################################################
@@ -153,6 +154,18 @@ store_in_cell:
     addi $sp, $sp, 4
     jr $ra
 
+
+# Clears the entire match_map to 0
+clear_match_map:
+    la $t0, match_map
+    li $t1, 208           
+    li $t2, 0
+clear_map_loop:
+    sw $t2, 0($t0)
+    addi $t0, $t0, 4
+    addi $t1, $t1, -1
+    bnez $t1, clear_map_loop
+    jr $ra
 ########################
 
 #a0 is the row
@@ -306,7 +319,15 @@ respond_to_W:
     j game_loop
 
 lock_and_new_column:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
     jal set_column_in_the_board
+    
+    jal clear_match_map
+    jal scan_horizontal_matches
+    jal scan_vertical_matches
+    jal clear_marked_cells
     
     li $t0, 4
     sw $t0, curr_column_x
@@ -314,6 +335,9 @@ lock_and_new_column:
     sw $t0, curr_column_y
     jal load_default_column
     jal draw_screen_helper
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     j game_loop
 
 set_column_in_the_board:
@@ -598,4 +622,222 @@ draw_screen_helper:
     
     lw $ra, 0($sp)
     addi $sp, $sp, 4
+    jr $ra
+    
+
+scan_horizontal_matches:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    li $t0, 1
+    
+sh_row_loop:
+    bge $t0, 25, sh_done
+    li $t1, 1    
+    
+sh_col_loop:
+    bge $t1, 7, sh_next_row
+    addi $sp, $sp, -8
+    sw $t0, 0($sp)    # save row
+    sw $t1, 4($sp)    # save col
+    
+    move $a0, $t0
+    move $a1, $t1
+    jal read_cell_from_array
+    move $t2, $v0 
+    
+    li $t3, -1
+    beq $t2, $t3, sh_skip_empty
+    
+    # Count run
+    li $t3, 0 
+    lw $t4, 4($sp)    # check_col = col
+    
+sh_count_loop:
+    bge $t4, 7, sh_check_run
+    
+    lw $a0, 0($sp)    
+    move $a1, $t4     # check_col
+    jal read_cell_from_array
+    
+    bne $v0, $t2, sh_check_run
+    
+    addi $t3, $t3, 1
+    addi $t4, $t4, 1
+    j sh_count_loop
+    
+sh_check_run:
+    blt $t3, 3, sh_skip_empty
+    
+    # Mark cells
+    lw $t5, 4($sp)
+    add $t6, $t5, $t3 
+    
+sh_mark_loop:
+    bge $t5, $t6, sh_mark_done
+    
+    lw $a0, 0($sp)    # row
+    move $a1, $t5     # col
+    jal get_offset_of_board
+    
+    la $t7, match_map
+    add $t7, $t7, $v0
+    li $t8, 1
+    sw $t8, 0($t7)
+    
+    addi $t5, $t5, 1
+    j sh_mark_loop
+    
+sh_mark_done:
+    lw $t1, 4($sp)  
+    add $t1, $t1, $t3
+    sw $t1, 4($sp)   
+    
+sh_skip_empty:
+    lw $t0, 0($sp)    
+    lw $t1, 4($sp)    
+    addi $sp, $sp, 8  
+    addi $t1, $t1, 1  
+    j sh_col_loop
+    
+sh_next_row:
+    addi $t0, $t0, 1
+    j sh_row_loop
+    
+sh_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+#same thing i think
+scan_vertical_matches:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
+    li $t0, 1     
+    
+sv_col_loop:
+    bge $t0, 7, sv_done   
+    li $t1, 1       
+    
+sv_row_loop:
+    bge $t1, 25, sv_next_col  
+
+
+    addi $sp, $sp, -8
+    sw $t1, 0($sp)    
+    sw $t0, 4($sp)   
+
+    move $a0, $t1     
+    move $a1, $t0     
+    jal read_cell_from_array
+    move $t2, $v0     
+
+    li $t3, -1
+    beq $t2, $t3, sv_skip_empty   
+
+    li $t3, 0      
+    lw $t4, 0($sp)     
+
+sv_count_loop:
+    bge $t4, 25, sv_check_run    
+    move $a0, $t4
+    lw   $a1, 4($sp)   
+    jal read_cell_from_array
+    bne $v0, $t2, sv_check_run
+    addi $t3, $t3, 1
+    addi $t4, $t4, 1
+    j sv_count_loop
+
+sv_check_run:
+    blt $t3, 3, sv_skip_empty
+
+    lw $t5, 0($sp)     
+    add $t6, $t5, $t3  
+
+sv_mark_loop:
+    bge $t5, $t6, sv_mark_done
+
+    move $a0, $t5       
+    lw $a1, 4($sp)    
+    jal get_offset_of_board
+
+    la $t7, match_map
+    add $t7, $t7, $v0
+    li $t8, 1
+    sw $t8, 0($t7)
+
+    addi $t5, $t5, 1
+    j sv_mark_loop
+
+sv_mark_done:
+    lw $t1, 0($sp)    
+    add $t1, $t1, $t3
+    sw $t1, 0($sp)
+
+sv_skip_empty:
+    lw $t1, 0($sp)    
+    lw $t0, 4($sp)    
+    addi $sp, $sp, 8  
+    addi $t1, $t1, 1  
+    j sv_row_loop
+
+sv_next_col:
+    addi $t0, $t0, 1
+    j sv_col_loop
+
+sv_done:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+# Clears all cells marked as 1 in match_map
+clear_marked_cells:
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    li $s0, 1
+    
+cmc_row_loop:
+    bge $s0, 25, cmc_done
+    li $s1, 1
+    
+cmc_col_loop:
+    bge $s1, 7, cmc_next_row
+    
+    # Check if marked in match_map
+    move $a0, $s0
+    move $a1, $s1
+    jal get_offset_of_board
+    
+    la $t0, match_map
+    add $t0, $t0, $v0
+    lw $t1, 0($t0)
+    
+    beqz $t1, cmc_next_col
+    
+    move $a0, $s0
+    move $a1, $s1
+    li $a2, -1
+    jal store_in_cell
+    
+    move $a0, $s1
+    move $a1, $s0
+    jal erase_unit
+    
+cmc_next_col:
+    addi $s1, $s1, 1
+    j cmc_col_loop
+    
+cmc_next_row:
+    addi $s0, $s0, 1
+    j cmc_row_loop
+    
+cmc_done:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
     jr $ra
