@@ -1080,28 +1080,17 @@ gravity_replace_block:
     move $a1, $s0
     move $a0, $s2
     jal store_in_cell
-    
     addi $s2, $s2, -1
     addi $s1, $s1, -1
+    j gravity_sleep
+gravity_sleep:
+    move $t0, $a0
+    li $v0, 32
+    li $a0, 150
+    syscall
+    move $a0, $t0
     j gravity_write_placement_loop
     
-    
-
-# #once the readers goes out of bounds, fill all blocks until top with black
-# gravity_black_fill:
-    # blt $s1, 1, gravity_next_col
-    # move $a0, $s1
-    # move $a1, $s0
-    # li $a2, -1
-    # jal store_in_cell     # erase unit
-    
-    # lw $a0, BLACK       # Color = Black
-    # move $a1, $s0       # X = Col
-    # move $a2, $s1       # Y = WritePtr
-    # jal draw_unit
-    
-    # addi $s1, $s1, -1
-    # j gravity_black_fill
 
 gravity_next_col:
     addi $s0, $s0, 1
