@@ -50,6 +50,7 @@ curr_gem_2: .word 2
 #each index stores the gem color
 #this will help later
 game_board: .space 832 #(26*8 *4)
+match_map: .space 832
 
 empty_cell: .word -1 #im thinking we make empty blocks into -1
 ##############################################################################
@@ -112,6 +113,16 @@ game_loop:
 
 
 #Function definitions
+####ARRAY FUNCTIONS######
+#
+#the arguments are a0, a1, which are row, column
+#if you wanna understand how this works lmk
+get_offset_of_board:
+    li $t0, 8
+    mul $t1, $a0, $t0 #so im first multiplying the current row by 8
+    add $t1, $t1, $a1 #then im adding the current column to to the result (r * 8) + col
+    sll $v0, $t1, 2   #shift twice multiplies it by 4. (4 bytes per word)
+    jr $ra
 
 ####ARRAY FUNCTIONS######
 #
@@ -153,6 +164,19 @@ store_in_cell:
     addi $sp, $sp, 4
     jr $ra
 
+########################
+
+# Clears the entire match_map to 0
+clear_match_map:
+    la $t0, match_map
+    li $t1, 208           
+    li $t2, 0
+clear_map_loop:
+    sw $t2, 0($t0)
+    addi $t0, $t0, 4
+    addi $t1, $t1, -1
+    bnez $t1, clear_map_loop
+    jr $ra
 ########################
 
 #a0 is the row
@@ -306,6 +330,19 @@ respond_to_W:
     j game_loop
 
 lock_and_new_column:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    jal set_column_in_the_board
+    
+    jal clear_match_map
+    jal scan_horizontal_matches
+    jal scan_vertical_matches
+    jal scan_diagonal
+    jal clear_marked_cells
+    jal apply_gravity
+    
+    
     jal set_column_in_the_board
     
     li $t0, 4
@@ -314,6 +351,9 @@ lock_and_new_column:
     sw $t0, curr_column_y
     jal load_default_column
     jal draw_screen_helper
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     j game_loop
 
 set_column_in_the_board:
