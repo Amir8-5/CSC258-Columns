@@ -53,6 +53,9 @@ game_board: .space 832 #(26*8 *4)
 match_map: .space 832
 
 empty_cell: .word -1 #im thinking we make empty blocks into -1
+
+drop_counter: .word 0
+drop_delay: .word 60
 ##############################################################################
 # Code
 ##############################################################################
@@ -82,7 +85,6 @@ main:
     li $v0, 10
     syscall
 
-    
 game_loop:
     # 1a. Check if key has been pressed
     # 1b. Check which key has been pressed
@@ -95,8 +97,40 @@ game_loop:
     lw $t0, ADDR_KBRD               # $t0 = base address for keyboard
     lw $t8, 0($t0)                  # Load first word from keyboard
     beq $t8, 1, keyboard_input      # If first word 1, key is pressed
-    j game_loop
 
+    lw $t1, drop_counter
+    lw $t2, drop_delay
+    
+    addi $t1, $t1, 10
+    blt $t1, $t2, skip_gravity 
+    
+    li $t1, 0                  
+    jal auto_gravity
+    
+    
+    skip_gravity:
+        sw $t1, drop_counter        
+        li $v0, 32
+        li $a0, 200
+        syscall
+        j game_loop
+    
+    auto_gravity:
+        addi $sp, $sp, -4
+        sw $ra, 0($sp)
+        
+        jal check_collision_down
+        beq $v0, 0, lock_and_new_column
+        
+        lw $t1, curr_column_y
+        addi $t1, $t1, 1
+        lw $a0, curr_column_x
+        move $a1, $t1
+        jal draw_screen
+        
+        lw $ra, 0($sp)
+        addi $sp, $sp, 4
+        jr $ra
 
     keyboard_input:                     # A key is pressed 
         lw $a0, 4($t0)                  # Load second word from keyboard
@@ -318,6 +352,7 @@ respond_to_W:
     j game_loop
 
 lock_and_new_column:
+    move $a0, $t0
     addi $sp, $sp, -4
     sw $ra, 0($sp)
     
@@ -365,6 +400,12 @@ lock_and_new_column:
     jal clear_marked_cells
     jal apply_gravity
     
+    #sleep
+    move $t0, $a0
+    li $v0, 32
+    li $a0, 500
+    syscall
+    #
     
     li $t0, 4
     sw $t0, curr_column_x
@@ -372,6 +413,10 @@ lock_and_new_column:
     sw $t0, curr_column_y
     jal load_default_column
     jal draw_screen_helper
+    
+    #check if we at the top so stop game prolly
+    jal check_collision_down
+    beq $v0, 0, respond_to_Q
     
     lw $ra, 0($sp)
     addi $sp, $sp, 4
@@ -1138,3 +1183,4 @@ gravity_done:
     lw $s2, 12($sp)
     addi $sp, $sp, 16
     jr $ra
+    
