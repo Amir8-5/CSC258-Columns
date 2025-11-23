@@ -1183,4 +1183,3 @@ gravity_done:
     lw $s2, 12($sp)
     addi $sp, $sp, 16
     jr $ra
-    
