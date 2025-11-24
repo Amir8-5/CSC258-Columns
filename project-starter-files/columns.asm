@@ -29,6 +29,7 @@ ADDR_DSPL:
 # The address of the keyboard. Don't forget to connect it!
 ADDR_KBRD:
     .word 0xffff0000
+is_paused: .word 0      # 0 = playing, 1 = paused
 
 ##############################################################################
 # Mutable Data
@@ -85,20 +86,24 @@ game_loop:
     lw $t0, ADDR_KBRD               
     lw $t8, 0($t0)                  
     beq $t8, 1, keyboard_input      
+    
+    # pause check
+    lw $t1, is_paused
+    bnez $t1, skip_gravity_logic # skip gravity if paused
 
     # 2. Gravity Logic (Time based)
     lw $t1, drop_counter
     lw $t2, drop_delay
     
     addi $t1, $t1, 10
-    blt $t1, $t2, skip_gravity 
+    blt $t1, $t2, skip_gravity
     
     li $t1, 0                  
     jal auto_gravity
     
     skip_gravity:
         sw $t1, drop_counter        
-        
+    skip_gravity_logic:
         # redraw
         jal redraw_game_state
 
@@ -125,12 +130,21 @@ game_loop:
         jr $ra
 
     keyboard_input:                     
-        lw $a0, 4($t0)                  
+        lw $a0, 4($t0)
+        
+        # should be able to stop and unpause and pause no matter what
         beq $a0, 0x71, respond_to_Q     
+        beq $a0, 0x70, respond_to_P
+        
+        # check if game is paused
+        lw $t1, is_paused
+        bnez $t1, game_loop
+        
         beq $a0, 0x64, respond_to_D
         beq $a0, 0x61, respond_to_A
         beq $a0, 0x77, respond_to_W
         beq $a0, 0x73, respond_to_S
+        
     
         j game_loop
 
@@ -359,6 +373,12 @@ respond_to_W:
     sw $t2, curr_gem_0  
     sw $t0, curr_gem_1  
     sw $t1, curr_gem_2  
+    j game_loop
+
+respond_to_P:
+    lw $t0, is_paused
+    xori $t0, $t0, 1
+    sw $t0, is_paused
     j game_loop
 
 lock_and_new_column:
