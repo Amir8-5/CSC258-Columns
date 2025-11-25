@@ -29,7 +29,7 @@ ADDR_DSPL:
 # The address of the keyboard. Don't forget to connect it!
 ADDR_KBRD:
     .word 0xffff0000
-is_paused: .word 0      # 0 = playing, 1 = paused
+is_paused: .word 1      # 0 = playing, 1 = paused
 
 ##############################################################################
 # Mutable Data
@@ -56,6 +56,12 @@ empty_cell: .word -1
 
 drop_counter: .word 0
 drop_delay: .word 60
+
+EASY_INCREMENT: 5
+MEDIUM_INCREMENT: 10
+HARD_INCREMENT: 20
+CHOSEN_DIFFICULTY_INCREMENT: .word 0
+GAME_DIFFICULTY_CHOSEN: .word 0  # 0 = dificulty not chosen, 1 = chosen
 ##############################################################################
 # Code
 ##############################################################################
@@ -95,10 +101,11 @@ game_loop:
     lw $t1, drop_counter
     lw $t2, drop_delay
     
-    addi $t1, $t1, 10
+    lw $t0, CHOSEN_DIFFICULTY_INCREMENT
+    add $t1, $t1, $t0
     blt $t1, $t2, skip_gravity
     
-    li $t1, 0                  
+    li $t1, 0    
     jal auto_gravity
     
     skip_gravity:
@@ -132,6 +139,17 @@ game_loop:
     keyboard_input:                     
         lw $a0, 4($t0)
         
+        # not Difficulty chosen
+        lw $t2, GAME_DIFFICULTY_CHOSEN
+        bnez $t2, skip_difficulty_chosen
+        
+        # if difficulty not chosen and game is paused
+        beq $a0, 0x71, respond_to_Q  
+        beq $a0, 0x31, respond_to_1 
+        beq $a0, 0x32, respond_to_2  
+        beq $a0, 0x33, respond_to_3 
+       
+    skip_difficulty_chosen:
         # should be able to stop and unpause and pause no matter what
         beq $a0, 0x71, respond_to_Q     
         beq $a0, 0x70, respond_to_P
@@ -144,7 +162,6 @@ game_loop:
         beq $a0, 0x61, respond_to_A
         beq $a0, 0x77, respond_to_W
         beq $a0, 0x73, respond_to_S
-        
     
         j game_loop
 
@@ -380,6 +397,45 @@ respond_to_P:
     xori $t0, $t0, 1
     sw $t0, is_paused
     j game_loop
+    
+respond_to_1:
+    lw $t0, GAME_DIFFICULTY_CHOSEN
+    # cant change difficulty if already chosen
+    bnez $t0, game_loop
+    lw $t1, EASY_INCREMENT
+    sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # set diff chosen
+    li $t1, 1
+    sw $t1, GAME_DIFFICULTY_CHOSEN
+    sw $zero, is_paused
+    j skip_difficulty_chosen
+
+respond_to_2:
+    lw $t0, GAME_DIFFICULTY_CHOSEN
+    # cant change difficulty if already chosen
+    bnez $t0, game_loop
+    lw $t1, MEDIUM_INCREMENT
+    sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # set diff chosen
+    li $t1, 1
+    sw $t1, GAME_DIFFICULTY_CHOSEN
+    sw $zero, is_paused
+    j skip_difficulty_chosen
+
+respond_to_3:
+    lw $t0, GAME_DIFFICULTY_CHOSEN
+    # cant change difficulty if already chosen
+    bnez $t0, game_loop
+    lw $t1, HARD_INCREMENT
+    sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # set diff chosen
+    li $t1, 1
+    sw $t1, GAME_DIFFICULTY_CHOSEN
+    sw $zero, is_paused
+    j skip_difficulty_chosen
 
 lock_and_new_column:
     addi $sp, $sp, -4
@@ -400,6 +456,9 @@ lock_and_new_column:
     li $t0, 1
     sw $t0, curr_column_y
     jal load_default_column
+    
+    # drawing the piece even if the game is over
+    jal redraw_game_state
     
     # Check Game Over
     jal check_collision_down
