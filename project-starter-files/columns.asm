@@ -55,12 +55,21 @@ match_map: .space 832
 empty_cell: .word -1 
 
 drop_counter: .word 0
-drop_delay: .word 60
+drop_delay: .word 1000
 
-EASY_INCREMENT: 5
-MEDIUM_INCREMENT: 10
-HARD_INCREMENT: 20
+# Increment : the speed the block falls
+# Speed_increase: how fast the speed increases
+EASY_INCREMENT: 83       
+EASY_SPEED_INCREASE: 2
+
+MEDIUM_INCREMENT: 166
+MEDIUM_SPEED_INCREASE: 4
+
+HARD_INCREMENT: 333
+HARD_SPEED_INCREASE: 8
+
 CHOSEN_DIFFICULTY_INCREMENT: .word 0
+CHOSEN_DIFFICULTY_SPEED_INCREASE: .word 0
 GAME_DIFFICULTY_CHOSEN: .word 0  # 0 = dificulty not chosen, 1 = chosen
 ##############################################################################
 # Code
@@ -105,6 +114,9 @@ game_loop:
     add $t1, $t1, $t0
     blt $t1, $t2, skip_gravity
     
+    lw $t5, CHOSEN_DIFFICULTY_SPEED_INCREASE
+    add $t0, $t0, $t5
+    sw $t0, CHOSEN_DIFFICULTY_INCREMENT
     li $t1, 0    
     jal auto_gravity
     
@@ -402,8 +414,14 @@ respond_to_1:
     lw $t0, GAME_DIFFICULTY_CHOSEN
     # cant change difficulty if already chosen
     bnez $t0, game_loop
+    
+    # choosing fall speed
     lw $t1, EASY_INCREMENT
     sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # choose falling speed increase
+    lw $t4, EASY_SPEED_INCREASE
+    sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
     
     # set diff chosen
     li $t1, 1
@@ -415,8 +433,14 @@ respond_to_2:
     lw $t0, GAME_DIFFICULTY_CHOSEN
     # cant change difficulty if already chosen
     bnez $t0, game_loop
-    lw $t1, MEDIUM_INCREMENT
+    
+    # choosing fall speed
+    lw $t1, EASY_INCREMENT
     sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # choose falling speed increase
+    lw $t4, EASY_SPEED_INCREASE
+    sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
     
     # set diff chosen
     li $t1, 1
@@ -428,8 +452,14 @@ respond_to_3:
     lw $t0, GAME_DIFFICULTY_CHOSEN
     # cant change difficulty if already chosen
     bnez $t0, game_loop
-    lw $t1, HARD_INCREMENT
+    
+    # choosing fall speed
+    lw $t1, EASY_INCREMENT
     sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # choose falling speed increase
+    lw $t4, EASY_SPEED_INCREASE
+    sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
     
     # set diff chosen
     li $t1, 1
