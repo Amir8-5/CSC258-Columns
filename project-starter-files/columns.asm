@@ -59,6 +59,7 @@ drop_delay: .word 60
 
 ####SCORE######
 score_count: .word 0
+high_score: .word 0
 chain_multiplier: .word 10
 
 # These are 3 (width) x 5 (height) patterns for the scoer
@@ -83,6 +84,9 @@ digit_9: .word 0b111001111101111
     # Run the game.
 main:
     # Initialize the game
+    li $t0, 0
+    sw $t0, high_score
+    
     la $t0, game_board
     li $t1, 208
     li $t2, -1
@@ -214,6 +218,8 @@ redraw_next_row:
 redraw_active_piece:
     #3 Draw score and active column
     jal draw_score
+    jal draw_high_score
+    jal draw_high_score_label
     jal draw_column
 
     lw $ra, 0($sp)
@@ -342,8 +348,16 @@ draw_walls:
     
         
 respond_to_Q:
-  li $v0, 10                      # Quit gracefully
-  syscall
+    lw $t0, score_count
+    lw $t1, high_score
+    
+    ble $t0, $t1, quit_game
+    
+    sw $t0, high_score
+
+quit_game:
+    li $v0, 10                      
+    syscall
 
 respond_to_S:
     jal check_collision_down
@@ -404,16 +418,16 @@ match_loop_start:
     jal clear_marked_cells
     jal apply_gravity
     
-    # Increment multiplier by 0.5
+    
     lw $t0, chain_multiplier
     addi $t0, $t0, 5
     sw $t0, chain_multiplier
     
-    # Small sleep for visual effect
     li $v0, 32
     li $a0, 300
     syscall
     
+    jal redraw_game_state
     j match_loop_start
     
 match_loop_done:
@@ -1062,13 +1076,12 @@ draw_score:
     sw $s1, 8($sp)
     sw $s2, 12($sp)
     
-    # First, clear the score area (draw black rectangles)
-    li $s0, 2  # Start row
+    li $s0, 2
 clear_score_row:
-    bge $s0, 7, clear_done  # Clear rows 2-6 (5 rows for digit height)
-    li $s1, 9  # Start col
+    bge $s0, 7, clear_done
+    li $s1, 19
 clear_score_col:
-    bge $s1, 20, next_clear_row  # Clear cols 9-19
+    bge $s1, 30, next_clear_row
     
     move $a0, $s0
     move $a1, $s1
@@ -1083,7 +1096,6 @@ next_clear_row:
     j clear_score_row
     
 clear_done:
-    # Now draw the digits
     lw $s0, score_count
     
     li $t0, 100
@@ -1100,19 +1112,19 @@ clear_done:
     # Draw hundreds digit
     move $a0, $s1
     li $a1, 2
-    li $a2, 9
+    li $a2, 19
     jal draw_digit
     
     # Draw tens digit
     move $a0, $s0
     li $a1, 2
-    li $a2, 13
+    li $a2, 23
     jal draw_digit
     
     # Draw ones digit
     move $a0, $s2
     li $a1, 2
-    li $a2, 17
+    li $a2, 27
     jal draw_digit
     
     lw $ra, 0($sp)
@@ -1138,5 +1150,160 @@ check_match_loop:
     
 matches_found:
     li $v0, 1
+    jr $ra
+    
+    
+draw_high_score:
+    addi $sp, $sp, -16
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    sw $s2, 12($sp)
+    
+    li $s0, 27  # Start row
+clear_hs_row:
+    bge $s0, 32, hs_clear_done
+    li $s1, 19
+clear_hs_col:
+    bge $s1, 30, next_hs_clear_row
+    
+    move $a0, $s0
+    move $a1, $s1
+    jal get_address
+    lw $t0, BLACK
+    sw $t0, 0($v0)
+    
+    addi $s1, $s1, 1
+    j clear_hs_col
+next_hs_clear_row:
+    addi $s0, $s0, 1
+    j clear_hs_row
+    
+hs_clear_done:
+    lw $s0, high_score
+    
+    li $t0, 100
+    div $s0, $t0
+    mflo $s1
+    mfhi $t1
+    
+    li $t0, 10
+    div $t1, $t0
+    mflo $s0
+    mfhi $s2
+    
+    move $a0, $s1
+    li $a1, 27
+    li $a2, 19
+    jal draw_digit
+    
+    move $a0, $s0
+    li $a1, 27
+    li $a2, 23
+    jal draw_digit
+    
+    move $a0, $s2
+    li $a1, 27
+    li $a2, 27
+    jal draw_digit
+    
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    addi $sp, $sp, 16
+    jr $ra
+    
+draw_high_score_label:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, WHITE
+
+    li $a1, 9
+    li $a2, 27
+    jal draw_unit
+    li $a1, 9
+    li $a2, 28
+    jal draw_unit
+    li $a1, 9
+    li $a2, 29
+    jal draw_unit
+    li $a1, 9
+    li $a2, 30
+    jal draw_unit
+    li $a1, 9
+    li $a2, 31
+    jal draw_unit
+
+    li $a1, 10
+    li $a2, 29
+    jal draw_unit
+    
+    li $a1, 11
+    li $a2, 27
+    jal draw_unit
+    li $a1, 11
+    li $a2, 28
+    jal draw_unit
+    li $a1, 11
+    li $a2, 29
+    jal draw_unit
+    li $a1, 11
+    li $a2, 30
+    jal draw_unit
+    li $a1, 11
+    li $a2, 31
+    jal draw_unit
+    
+    #S
+    li $a1, 13
+    li $a2, 27
+    jal draw_unit
+    li $a1, 14
+    li $a2, 27
+    jal draw_unit
+    li $a1, 15
+    li $a2, 27
+    jal draw_unit
+    
+    li $a1, 13
+    li $a2, 28
+    jal draw_unit
+    
+    li $a1, 13
+    li $a2, 29
+    jal draw_unit
+    li $a1, 14
+    li $a2, 29
+    jal draw_unit
+    li $a1, 15
+    li $a2, 29
+    jal draw_unit
+    
+    li $a1, 15
+    li $a2, 30
+    jal draw_unit
+    
+    li $a1, 13
+    li $a2, 31
+    jal draw_unit
+    li $a1, 14
+    li $a2, 31
+    jal draw_unit
+    li $a1, 15
+    li $a2, 31
+    jal draw_unit
+    
+    # the column
+    li $a1, 17
+    li $a2, 28
+    jal draw_unit
+    li $a1, 17
+    li $a2, 30
+    jal draw_unit
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
     jr $ra
 #################################
