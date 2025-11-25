@@ -30,6 +30,7 @@ ADDR_DSPL:
 # The address of the keyboard. Don't forget to connect it!
 ADDR_KBRD:
     .word 0xffff0000
+is_paused: .word 1      # 0 = playing, 1 = paused
 
 ##############################################################################
 # Mutable Data
@@ -55,6 +56,22 @@ match_map: .space 832
 empty_cell: .word -1 
 
 drop_counter: .word 0
+drop_delay: .word 1000
+
+# Increment : the speed the block falls
+# Speed_increase: how fast the speed increases
+EASY_INCREMENT: 83       
+EASY_SPEED_INCREASE: 2
+
+MEDIUM_INCREMENT: 166
+MEDIUM_SPEED_INCREASE: 4
+
+HARD_INCREMENT: 333
+HARD_SPEED_INCREASE: 8
+
+CHOSEN_DIFFICULTY_INCREMENT: .word 0
+CHOSEN_DIFFICULTY_SPEED_INCREASE: .word 0
+GAME_DIFFICULTY_CHOSEN: .word 0  # 0 = dificulty not chosen, 1 = chosen
 drop_delay: .word 60
 
 ####SCORE######
@@ -109,20 +126,28 @@ game_loop:
     lw $t0, ADDR_KBRD               
     lw $t8, 0($t0)                  
     beq $t8, 1, keyboard_input      
+    
+    # pause check
+    lw $t1, is_paused
+    bnez $t1, skip_gravity_logic # skip gravity if paused
 
     # 2. Gravity Logic (Time based)
     lw $t1, drop_counter
     lw $t2, drop_delay
     
-    addi $t1, $t1, 10
-    blt $t1, $t2, skip_gravity 
+    lw $t0, CHOSEN_DIFFICULTY_INCREMENT
+    add $t1, $t1, $t0
+    blt $t1, $t2, skip_gravity
     
-    li $t1, 0                  
+    lw $t5, CHOSEN_DIFFICULTY_SPEED_INCREASE
+    add $t0, $t0, $t5
+    sw $t0, CHOSEN_DIFFICULTY_INCREMENT
+    li $t1, 0    
     jal auto_gravity
     
     skip_gravity:
         sw $t1, drop_counter        
-        
+    skip_gravity_logic:
         # redraw
         jal redraw_game_state
 
@@ -149,8 +174,27 @@ game_loop:
         jr $ra
 
     keyboard_input:                     
-        lw $a0, 4($t0)                  
+        lw $a0, 4($t0)
+        
+        # not Difficulty chosen
+        lw $t2, GAME_DIFFICULTY_CHOSEN
+        bnez $t2, skip_difficulty_chosen
+        
+        # if difficulty not chosen and game is paused
+        beq $a0, 0x71, respond_to_Q  
+        beq $a0, 0x31, respond_to_1 
+        beq $a0, 0x32, respond_to_2  
+        beq $a0, 0x33, respond_to_3 
+       
+    skip_difficulty_chosen:
+        # should be able to stop and unpause and pause no matter what
         beq $a0, 0x71, respond_to_Q     
+        beq $a0, 0x70, respond_to_P
+        
+        # check if game is paused
+        lw $t1, is_paused
+        bnez $t1, game_loop
+        
         beq $a0, 0x64, respond_to_D
         beq $a0, 0x61, respond_to_A
         beq $a0, 0x77, respond_to_W
@@ -358,6 +402,7 @@ respond_to_Q:
 quit_game:
     li $v0, 10                      
     syscall
+    jal game_over
 
 respond_to_S:
     jal check_collision_down
@@ -395,6 +440,70 @@ respond_to_W:
     sw $t0, curr_gem_1  
     sw $t1, curr_gem_2  
     j game_loop
+
+respond_to_P:
+    lw $t0, is_paused
+    xori $t0, $t0, 1
+    sw $t0, is_paused
+    j game_loop
+    
+respond_to_1:
+    lw $t0, GAME_DIFFICULTY_CHOSEN
+    # cant change difficulty if already chosen
+    bnez $t0, game_loop
+    
+    # choosing fall speed
+    lw $t1, EASY_INCREMENT
+    sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # choose falling speed increase
+    lw $t4, EASY_SPEED_INCREASE
+    sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
+    
+    # set diff chosen
+    li $t1, 1
+    sw $t1, GAME_DIFFICULTY_CHOSEN
+    sw $zero, is_paused
+    j skip_difficulty_chosen
+
+respond_to_2:
+    lw $t0, GAME_DIFFICULTY_CHOSEN
+    # cant change difficulty if already chosen
+    bnez $t0, game_loop
+    
+    # choosing fall speed
+    lw $t1, EASY_INCREMENT
+    sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # choose falling speed increase
+    lw $t4, EASY_SPEED_INCREASE
+    sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
+    
+    # set diff chosen
+    li $t1, 1
+    sw $t1, GAME_DIFFICULTY_CHOSEN
+    sw $zero, is_paused
+    j skip_difficulty_chosen
+
+respond_to_3:
+    lw $t0, GAME_DIFFICULTY_CHOSEN
+    # cant change difficulty if already chosen
+    bnez $t0, game_loop
+    
+    # choosing fall speed
+    lw $t1, EASY_INCREMENT
+    sw $t1, CHOSEN_DIFFICULTY_INCREMENT
+    
+    # choose falling speed increase
+    lw $t4, EASY_SPEED_INCREASE
+    sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
+    
+    # set diff chosen
+    li $t1, 1
+    sw $t1, GAME_DIFFICULTY_CHOSEN
+    sw $zero, is_paused
+    j skip_difficulty_chosen
+
     
 lock_and_new_column:
     addi $sp, $sp, -4
@@ -437,6 +546,10 @@ match_loop_done:
     sw $t0, curr_column_y
     jal load_default_column
     
+    # drawing the piece even if the game is over
+    jal redraw_game_state
+    
+    # Check Game Over
     jal check_collision_down
     beq $v0, 0, respond_to_Q
     
@@ -1005,6 +1118,427 @@ gravity_done:
     jr $ra
 
 
+game_over:
+    jal draw_game_over_text
+    li $v0, 10                      # Quit gracefully
+    syscall
+    
+    
+# Function: draw_game_over_text
+draw_game_over_text:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
+    # Set Color to RED
+    li $s2, 0xFF3E3E    
+    
+    # Start Position (Top Left)
+    li $s0, 10           # Start X (Col 10)
+    li $s1, 10          # Start Y (Row 10)
+
+    # --- LETTER G ---
+    move $a0, $s2       
+    addi $a1, $s0, 1    # x+1
+    move $a2, $s1       # y
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    move $a2, $s1       # y
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    move $a2, $s1       # y
+    jal draw_unit       
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1    # y+1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1    # x+1
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to BLUE
+    li $s2, 0x6B82FE
+
+    # --- LETTER A ---
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 1    # y+1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1    # x+1
+    move $a2, $s1       # y
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 1    # y+1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1    # x+1
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to CREAM
+    li $s2, 0xFFF5E4
+
+    # --- LETTER M ---
+    # Left Leg
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Right Leg
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Middle Dot
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 1
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to RED
+    li $s2, 0xFFA500 
+
+    # --- LETTER E ---
+    # Left Bar
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Top Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    # Mid Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Bot Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+    
+    
+    # reset x to 10 ( starting point ) 
+    li $s0, 10
+    
+    # line break for y, OVER printed in next line
+    li $s1, 17
+
+    # --- LETTER O ---
+    # Top
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    # Left
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    # Right
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 3
+    jal draw_unit
+    # Bot
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to CREAM
+    li $s2, 0xFFF5E4 
+
+    # --- LETTER V ---
+    # Left Top
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Right Top
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Point
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to BLUE
+    li $s2, 0x6B82FE
+
+    # --- LETTER E ---
+    # Left Bar
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Top Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    # Mid Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Bot Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to RED
+    li $s2, 0xFF3E3E 
+
+    # --- LETTER R ---
+    # Left Bar
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Top Curve
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Leg
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+    
+    
 ####### SCORE FUNCTIONS #########
 increment_score:
     lw $t0, score_count
