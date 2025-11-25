@@ -31,6 +31,7 @@ ADDR_DSPL:
 ADDR_KBRD:
     .word 0xffff0000
 is_paused: .word 1      # 0 = playing, 1 = paused
+game_over_state: .word 0 
 
 ##############################################################################
 # Mutable Data
@@ -56,18 +57,16 @@ match_map: .space 832
 empty_cell: .word -1 
 
 drop_counter: .word 0
-drop_delay: .word 1000
+# drop_delay: .word 1000
 
 # Increment : the speed the block falls
 # Speed_increase: how fast the speed increases
-EASY_INCREMENT: 83       
-EASY_SPEED_INCREASE: 2
-
-MEDIUM_INCREMENT: 166
-MEDIUM_SPEED_INCREASE: 4
-
-HARD_INCREMENT: 333
-HARD_SPEED_INCREASE: 8
+EASY_INCREMENT: .word 83       
+EASY_SPEED_INCREASE: .word 2
+MEDIUM_INCREMENT: .word 166
+MEDIUM_SPEED_INCREASE: .word 4
+HARD_INCREMENT: .word 333
+HARD_SPEED_INCREASE: .word 8
 
 CHOSEN_DIFFICULTY_INCREMENT: .word 0
 CHOSEN_DIFFICULTY_SPEED_INCREASE: .word 0
@@ -101,9 +100,6 @@ digit_9: .word 0b111001111101111
     # Run the game.
 main:
     # Initialize the game
-    li $t0, 0
-    sw $t0, high_score
-    
     la $t0, game_board
     li $t1, 208
     li $t2, -1
@@ -118,8 +114,6 @@ main:
     jal redraw_game_state 
     
     j game_loop
-    li $v0, 10
-    syscall
 
 game_loop:
     # 1. Input
@@ -176,6 +170,10 @@ game_loop:
     keyboard_input:                     
         lw $a0, 4($t0)
         
+        # Check if game is over first
+        lw $t3, game_over_state
+        bnez $t3, respond_to_game_over
+        
         # not Difficulty chosen
         lw $t2, GAME_DIFFICULTY_CHOSEN
         bnez $t2, skip_difficulty_chosen
@@ -184,7 +182,7 @@ game_loop:
         beq $a0, 0x71, respond_to_Q  
         beq $a0, 0x31, respond_to_1 
         beq $a0, 0x32, respond_to_2  
-        beq $a0, 0x33, respond_to_3 
+        beq $a0, 0x33, respond_to_3
        
     skip_difficulty_chosen:
         # should be able to stop and unpause and pause no matter what
@@ -202,6 +200,10 @@ game_loop:
     
         j game_loop
 
+    respond_to_game_over:
+        beq $a0, 0x72, respond_to_R     # r key = restart
+        beq $a0, 0x71, respond_to_Q
+        j game_loop
 
 #Function definitions
 
@@ -271,8 +273,6 @@ redraw_active_piece:
     lw $s1, 8($sp)
     addi $sp, $sp, 12
     jr $ra
-    
-
 
 get_offset_of_board:
     li $t0, 8
@@ -392,17 +392,34 @@ draw_walls:
     
         
 respond_to_Q:
+    lw $t2, game_over_state
+    bnez $t2, actually_quit
+    
     lw $t0, score_count
     lw $t1, high_score
     
     ble $t0, $t1, quit_game
     
     sw $t0, high_score
+    j quit_game
 
-quit_game:
+actually_quit:
     li $v0, 10                      
     syscall
+
+quit_game:
+    li $t0, 1
+    sw $t0, game_over_state
+    
     jal game_over
+    
+    # sleep for some leeway
+    li $v0, 32
+    li $a0, 1000
+    syscall
+    
+    # let them press R or Q
+    j game_loop
 
 respond_to_S:
     jal check_collision_down
@@ -472,11 +489,11 @@ respond_to_2:
     bnez $t0, game_loop
     
     # choosing fall speed
-    lw $t1, EASY_INCREMENT
+    lw $t1, MEDIUM_INCREMENT
     sw $t1, CHOSEN_DIFFICULTY_INCREMENT
     
     # choose falling speed increase
-    lw $t4, EASY_SPEED_INCREASE
+    lw $t4, MEDIUM_SPEED_INCREASE
     sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
     
     # set diff chosen
@@ -491,11 +508,11 @@ respond_to_3:
     bnez $t0, game_loop
     
     # choosing fall speed
-    lw $t1, EASY_INCREMENT
+    lw $t1, HARD_INCREMENT
     sw $t1, CHOSEN_DIFFICULTY_INCREMENT
     
     # choose falling speed increase
-    lw $t4, EASY_SPEED_INCREASE
+    lw $t4, HARD_SPEED_INCREASE
     sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
     
     # set diff chosen
@@ -504,6 +521,42 @@ respond_to_3:
     sw $zero, is_paused
     j skip_difficulty_chosen
 
+respond_to_R:
+    li $t0, 0
+    sw $t0, game_over_state
+    sw $t0, score_count
+    sw $t0, GAME_DIFFICULTY_CHOSEN
+    
+    li $t0, 1
+    sw $t0, is_paused
+    
+    li $t0, 0
+    sw $t0, CHOSEN_DIFFICULTY_INCREMENT
+    
+    la $t0, game_board
+    li $t1, 208
+    li $t2, -1
+    
+restart_clear_loop:
+    sw $t2, 0($t0)
+    addi $t0, $t0, 4
+    addi $t1, $t1, -1
+    bnez $t1, restart_clear_loop
+    
+    # reset the column positions
+    li $t0, 4
+    sw $t0, curr_column_x
+    li $t0, 1
+    sw $t0, curr_column_y
+    
+    # load new columns
+    jal load_default_column
+    
+    # redraw everything
+    jal redraw_game_state
+    
+    j game_loop
+    
     
 lock_and_new_column:
     addi $sp, $sp, -4
@@ -1119,10 +1172,61 @@ gravity_done:
 
 
 game_over:
-    jal draw_game_over_text
-    li $v0, 10                      # Quit gracefully
-    syscall
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
     
+    li $s0, 1   
+    
+clear_board_row:
+    bge $s0, 25, clear_board_done
+    li $s1, 1
+    
+clear_board_col:
+    bge $s1, 7, clear_board_next_row
+    
+    lw $a0, BLACK
+    move $a1, $s1
+    move $a2, $s0
+    jal draw_unit
+    
+    addi $s1, $s1, 1
+    j clear_board_col
+clear_board_next_row:
+    addi $s0, $s0, 1
+    j clear_board_row
+    
+clear_board_done:
+    li $s0, 9
+    
+clear_highs_area_row:
+    bge $s0, 32, clear_highs_area_done
+    li $s1, 9
+    
+clear_highs_area_col:
+    bge $s1, 32, clear_highs_area_next_row
+    
+    lw $a0, BLACK
+    move $a1, $s1
+    move $a2, $s0
+    jal draw_unit
+    
+    addi $s1, $s1, 1
+    j clear_highs_area_col
+    
+clear_highs_area_next_row:
+    addi $s0, $s0, 1
+    j clear_highs_area_row
+    
+clear_highs_area_done:
+    jal draw_game_over_text
+    
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
+    jr $ra
     
 # Function: draw_game_over_text
 draw_game_over_text:
