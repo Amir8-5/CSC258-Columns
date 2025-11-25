@@ -21,6 +21,7 @@
 
 gray: .word 0x707070
 BLACK: .word 0x000000
+WHITE: .word 0xFFFFFF
 
 ##############################################################################
 # The address of the bitmap display. Don't forget to connect it!
@@ -71,6 +72,26 @@ HARD_SPEED_INCREASE: 8
 CHOSEN_DIFFICULTY_INCREMENT: .word 0
 CHOSEN_DIFFICULTY_SPEED_INCREASE: .word 0
 GAME_DIFFICULTY_CHOSEN: .word 0  # 0 = dificulty not chosen, 1 = chosen
+drop_delay: .word 60
+
+####SCORE######
+score_count: .word 0
+chain_multiplier: .word 10
+
+# These are 3 (width) x 5 (height) patterns for the scoer
+#by the way u read it backwards
+#so the top is the last 3 digits and back
+digit_0: .word 0b111101101101111 # so 111 101 101 101 111
+digit_1: .word 0b111010010110010 # and so on
+digit_2: .word 0b111100111001111
+digit_3: .word 0b111001111001111
+digit_4: .word 0b001001111101101
+digit_5: .word 0b111001111100111
+digit_6: .word 0b111101111100111
+digit_7: .word 0b001001001001111
+digit_8: .word 0b111101111101111
+digit_9: .word 0b111001111101111  
+###############
 ##############################################################################
 # Code
 ##############################################################################
@@ -235,7 +256,8 @@ redraw_next_row:
     j redraw_row_loop
 
 redraw_active_piece:
-    # 3. Draw the floating active column on top
+    #3 Draw score and active column
+    jal draw_score
     jal draw_column
 
     lw $ra, 0($sp)
@@ -466,20 +488,42 @@ respond_to_3:
     sw $zero, is_paused
     j skip_difficulty_chosen
 
+    
 lock_and_new_column:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
     
     jal set_column_in_the_board
     
-    # Loop 5 times to ensure chain reactions are caught
-    # (Since we aren't using recursion, repetition helps)
-    jal resolve_matches_and_gravity
-    jal resolve_matches_and_gravity
-    jal resolve_matches_and_gravity
-    jal resolve_matches_and_gravity
-    jal resolve_matches_and_gravity
+    # Initialize chain multiplier
+    li $t0, 10
+    sw $t0, chain_multiplier
     
+match_loop_start:
+    jal clear_match_map
+    jal scan_horizontal_matches
+    jal scan_vertical_matches
+    jal scan_diagonal
+    
+    jal check_if_matches_exist
+    beq $v0, 0, match_loop_done
+    
+    jal clear_marked_cells
+    jal apply_gravity
+    
+    # Increment multiplier by 0.5
+    lw $t0, chain_multiplier
+    addi $t0, $t0, 5
+    sw $t0, chain_multiplier
+    
+    # Small sleep for visual effect
+    li $v0, 32
+    li $a0, 300
+    syscall
+    
+    j match_loop_start
+    
+match_loop_done:
     li $t0, 4
     sw $t0, curr_column_x
     li $t0, 1
@@ -498,18 +542,18 @@ lock_and_new_column:
     j game_loop
 
 # Helper to run one pass of logic
-resolve_matches_and_gravity:
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
-    jal clear_match_map
-    jal scan_horizontal_matches
-    jal scan_vertical_matches
-    jal scan_diagonal
-    jal clear_marked_cells # Updates Memory Only
-    jal apply_gravity      # Updates Memory Only
-    lw $ra, 0($sp)
-    addi $sp, $sp, 4
-    jr $ra
+#resolve_matches_and_gravity:
+    #addi $sp, $sp, -4
+    #sw $ra, 0($sp)
+    #jal clear_match_map
+    #jal scan_horizontal_matches
+    #jal scan_vertical_matches
+    #jal scan_diagonal
+    #jal clear_marked_cells # Updates Memory Only
+    #jal apply_gravity      # Updates Memory Only
+    #lw $ra, 0($sp)
+    #addi $sp, $sp, 4
+    #jr $ra
 
 set_column_in_the_board:
     addi $sp, $sp, -12
@@ -670,14 +714,6 @@ draw_unit:
     add $t4, $t0, $t1   # final = base + offset
     sw $a0, 0($t4)      # store the color value a0 at final address
     jr $ra
-
-draw_screen_helper:
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
-    jal draw_column
-    lw $ra, 0($sp)
-    addi $sp, $sp, 4
-    jr $ra
     
 scan_horizontal_matches:
     addi $sp, $sp, -4
@@ -723,15 +759,19 @@ sh_mark_loop:
     sw $t8, 0($t7)
     addi $t5, $t5, 1
     j sh_mark_loop
+    
 sh_mark_done:
     lw $t1, 4($sp)  
     add $t1, $t1, $t3
-    sw $t1, 4($sp)   
+    lw $t0, 0($sp)
+    addi $sp, $sp, 8
+    j sh_col_loop
+    
 sh_skip_empty:
     lw $t0, 0($sp)    
     lw $t1, 4($sp)    
     addi $sp, $sp, 8  
-    addi $t1, $t1, 1  
+    addi $t1, $t1, 1
     j sh_col_loop
 sh_next_row:
     addi $t0, $t0, 1
@@ -739,8 +779,9 @@ sh_next_row:
 sh_done:
     lw $ra, 0($sp)
     addi $sp, $sp, 4
-    jr $ra
-
+    jr $ra    
+    
+#same thing i think
 scan_vertical_matches:
     addi $sp, $sp, -4
     sw $ra, 0($sp)
@@ -750,6 +791,7 @@ sv_col_loop:
     li $t1, 1       
 sv_row_loop:
     bge $t1, 25, sv_next_col  
+
     addi $sp, $sp, -8
     sw $t1, 0($sp)    
     sw $t0, 4($sp)   
@@ -788,12 +830,15 @@ sv_mark_loop:
 sv_mark_done:
     lw $t1, 0($sp)    
     add $t1, $t1, $t3
-    sw $t1, 0($sp)
+    lw $t0, 4($sp)
+    addi $sp, $sp, 8
+    j sv_row_loop
+
 sv_skip_empty:
     lw $t1, 0($sp)    
     lw $t0, 4($sp)    
     addi $sp, $sp, 8  
-    addi $t1, $t1, 1  
+    addi $t1, $t1, 1
     j sv_row_loop
 sv_next_col:
     addi $t0, $t0, 1
@@ -804,25 +849,36 @@ sv_done:
     jr $ra
 
 clear_marked_cells:
-    addi $sp, $sp, -12
+    addi $sp, $sp, -16
     sw $ra, 0($sp)
     sw $s0, 4($sp)
     sw $s1, 8($sp)
+    sw $s2, 12($sp)
+
+    li $s2, 0   
     li $s0, 1
+    
 cmc_row_loop:
     bge $s0, 25, cmc_done
     li $s1, 1
+    
 cmc_col_loop:
     bge $s1, 7, cmc_next_row
+    
     move $a0, $s0
     move $a1, $s1
     jal get_offset_of_board
+    
     la $t0, match_map
     add $t0, $t0, $v0
     lw $t1, 0($t0)
+    
     beqz $t1, cmc_next_col
     
-    # MEMORY ONLY UPDATE
+    # Count cleared gems
+    addi $s2, $s2, 1
+    
+    # Update memory only (no visual draw)
     move $a0, $s0
     move $a1, $s1
     li $a2, -1
@@ -831,14 +887,30 @@ cmc_col_loop:
 cmc_next_col:
     addi $s1, $s1, 1
     j cmc_col_loop
+    
 cmc_next_row:
     addi $s0, $s0, 1
     j cmc_row_loop
+    
 cmc_done:
+    # Apply multiplier (gems * multiplier) / 10
+    move $t0, $s2
+    lw $t1, chain_multiplier
+    mul $t0, $t0, $t1
+    
+    li $t2, 10
+    div $t0, $t2
+    mflo $t0
+    
+    lw $t1, score_count
+    add $t1, $t1, $t0
+    sw $t1, score_count    
+    
     lw $ra, 0($sp)
     lw $s0, 4($sp)
     lw $s1, 8($sp)
-    addi $sp, $sp, 12
+    lw $s2, 12($sp)
+    addi $sp, $sp, 16
     jr $ra
     
 scan_diagonal:
@@ -890,6 +962,8 @@ sd_mark_loop_1:
     addi $t4, $t4, 1        
     addi $t5, $t5, 1    
     j sd_mark_loop_1
+    
+# top right oto bot left direction
 sd_start_dir_2:
     li $t3, 0               
     lw $t4, 0($sp)          
@@ -922,6 +996,7 @@ sd_mark_loop_2:
     addi $t4, $t4, 1
     addi $t5, $t5, -1
     j sd_mark_loop_2
+    
 sd_skip_empty:
     lw $t0, 0($sp)
     lw $t1, 4($sp)
@@ -1448,3 +1523,152 @@ draw_game_over_text:
     jr $ra
     
     
+####### SCORE FUNCTIONS #########
+increment_score:
+    lw $t0, score_count
+    addi $t0, $t0, 1
+    sw $t0, score_count
+    jr $ra
+
+# a0 (which digit), a1 (row), a2(column)
+draw_digit:
+    addi $sp, $sp, -20
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    sw $s2, 12($sp)
+    sw $s3, 16($sp)
+    
+    # look up the pattern
+    la $t0, digit_0
+    sll $t1, $a0, 2
+    add $t0, $t0, $t1
+    lw $s0, 0($t0)
+    
+    move $s3, $a1
+    move $t9, $a2
+    
+    li $s1, 0
+    
+draw_digit_row:
+    bge $s1, 5, draw_digit_done
+    li $s2, 0
+    
+draw_digit_col:
+    bge $s2, 3, draw_digit_next_row
+    
+    andi $t0, $s0, 1
+    beqz $t0, draw_digit_skip_pixel
+    
+    # Draw white pixel
+    add $a0, $s3, $s1
+    sub $a1, $t9, $s2
+    addi $a1, $a1, 2
+    jal get_address
+    lw $t1, WHITE
+    sw $t1, 0($v0)
+    
+draw_digit_skip_pixel:
+    srl $s0, $s0, 1
+    addi $s2, $s2, 1
+    j draw_digit_col
+    
+draw_digit_next_row:
+    addi $s1, $s1, 1
+    j draw_digit_row
+    
+draw_digit_done:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    addi $sp, $sp, 20
+    jr $ra
+
+# Actually drawing the score
+draw_score:
+    addi $sp, $sp, -16
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    sw $s2, 12($sp)
+    
+    # First, clear the score area (draw black rectangles)
+    li $s0, 2  # Start row
+clear_score_row:
+    bge $s0, 7, clear_done  # Clear rows 2-6 (5 rows for digit height)
+    li $s1, 9  # Start col
+clear_score_col:
+    bge $s1, 20, next_clear_row  # Clear cols 9-19
+    
+    move $a0, $s0
+    move $a1, $s1
+    jal get_address
+    lw $t0, BLACK
+    sw $t0, 0($v0)
+    
+    addi $s1, $s1, 1
+    j clear_score_col
+next_clear_row:
+    addi $s0, $s0, 1
+    j clear_score_row
+    
+clear_done:
+    # Now draw the digits
+    lw $s0, score_count
+    
+    li $t0, 100
+    div $s0, $t0
+    mflo $s1     # $s1 = hundreds digit
+    mfhi $t1     # $t1 = remainder (0-99)
+    
+    # Extract tens and ones from remainder
+    li $t0, 10
+    div $t1, $t0
+    mflo $s0     # $s0 = tens digit
+    mfhi $s2     # $s2 = ones digit
+    
+    # Draw hundreds digit
+    move $a0, $s1
+    li $a1, 2
+    li $a2, 9
+    jal draw_digit
+    
+    # Draw tens digit
+    move $a0, $s0
+    li $a1, 2
+    li $a2, 13
+    jal draw_digit
+    
+    # Draw ones digit
+    move $a0, $s2
+    li $a1, 2
+    li $a2, 17
+    jal draw_digit
+    
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    addi $sp, $sp, 16
+    jr $ra
+    
+check_if_matches_exist:
+    la $t0, match_map
+    li $t1, 208
+    
+check_match_loop:
+    lw $t2, 0($t0)
+    bnez $t2, matches_found
+    addi $t0, $t0, 4
+    addi $t1, $t1, -1
+    bnez $t1, check_match_loop
+    
+    li $v0, 0  
+    jr $ra
+    
+matches_found:
+    li $v0, 1
+    jr $ra
+#################################
