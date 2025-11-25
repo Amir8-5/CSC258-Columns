@@ -77,6 +77,7 @@ drop_delay: .word 60
 score_count: .word 0
 high_score: .word 0
 chain_multiplier: .word 10
+difficulty_multiplier: .word 10  # 10 = 1.0x, 15 = 1.5x, 20 = 2.0x (stored as tenths)
 
 # These are 3 (width) x 5 (height) patterns for the scoer
 #by the way u read it backwards
@@ -121,6 +122,10 @@ game_loop:
     lw $t8, 0($t0)                  
     beq $t8, 1, keyboard_input      
     
+    # Check if game is over first
+    lw $t3, game_over_state
+    bnez $t3, respond_to_game_over
+    
     # pause check
     lw $t1, is_paused
     bnez $t1, skip_gravity_logic # skip gravity if paused
@@ -142,9 +147,13 @@ game_loop:
     skip_gravity:
         sw $t1, drop_counter        
     skip_gravity_logic:
+        lw $t9, game_over_state
+        bnez $t9, skip_redraw_during_game_over
+        
         # redraw
         jal redraw_game_state
 
+    skip_redraw_during_game_over:
         # sleep
         li $v0, 32
         # small sleep for stability
@@ -169,11 +178,6 @@ game_loop:
 
     keyboard_input:                     
         lw $a0, 4($t0)
-        
-        # Check if game is over first
-        lw $t3, game_over_state
-        bnez $t3, respond_to_game_over
-        
         # not Difficulty chosen
         lw $t2, GAME_DIFFICULTY_CHOSEN
         bnez $t2, skip_difficulty_chosen
@@ -266,8 +270,12 @@ redraw_active_piece:
     jal draw_score
     jal draw_high_score
     jal draw_high_score_label
+    
+    lw $t0, game_over_state
+    bnez $t0, skip_draw_column
     jal draw_column
 
+skip_draw_column:
     lw $ra, 0($sp)
     lw $s0, 4($sp)
     lw $s1, 8($sp)
@@ -477,6 +485,10 @@ respond_to_1:
     lw $t4, EASY_SPEED_INCREASE
     sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
     
+    # set difficulty multiplier (1.0x = 10)
+    li $t1, 10
+    sw $t1, difficulty_multiplier
+    
     # set diff chosen
     li $t1, 1
     sw $t1, GAME_DIFFICULTY_CHOSEN
@@ -495,6 +507,10 @@ respond_to_2:
     # choose falling speed increase
     lw $t4, MEDIUM_SPEED_INCREASE
     sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
+    
+    # set difficulty multiplier (1.5x = 15)
+    li $t1, 15
+    sw $t1, difficulty_multiplier
     
     # set diff chosen
     li $t1, 1
@@ -515,6 +531,10 @@ respond_to_3:
     lw $t4, HARD_SPEED_INCREASE
     sw $t4, CHOSEN_DIFFICULTY_SPEED_INCREASE
     
+    # set difficulty multiplier (2.0x = 20)
+    li $t1, 20
+    sw $t1, difficulty_multiplier
+    
     # set diff chosen
     li $t1, 1
     sw $t1, GAME_DIFFICULTY_CHOSEN
@@ -533,6 +553,11 @@ respond_to_R:
     li $t0, 0
     sw $t0, CHOSEN_DIFFICULTY_INCREMENT
     
+    # reset difficulty multiplier to default (1.0x)
+    li $t0, 10
+    sw $t0, difficulty_multiplier
+    
+    # Clear the game board array
     la $t0, game_board
     li $t1, 208
     li $t2, -1
@@ -542,6 +567,38 @@ restart_clear_loop:
     addi $t0, $t0, 4
     addi $t1, $t1, -1
     bnez $t1, restart_clear_loop
+    
+    # Clear entire screen to black (this removesthe game over screen)
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    li $s0, 0
+clear_full_screen_row:
+    bge $s0, 32, clear_full_screen_done
+    li $s1, 0
+    
+clear_full_screen_col:
+    bge $s1, 32, clear_full_screen_next_row
+    
+    lw $a0, BLACK
+    move $a1, $s1
+    move $a2, $s0
+    jal draw_unit
+    
+    addi $s1, $s1, 1
+    j clear_full_screen_col
+    
+clear_full_screen_next_row:
+    addi $s0, $s0, 1
+    j clear_full_screen_row
+    
+clear_full_screen_done:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
     
     # reset the column positions
     li $t0, 4
@@ -593,36 +650,22 @@ match_loop_start:
     j match_loop_start
     
 match_loop_done:
+    # Reset position for new column
     li $t0, 4
     sw $t0, curr_column_x
     li $t0, 1
     sw $t0, curr_column_y
-    jal load_default_column
     
-    # drawing the piece even if the game is over
-    jal redraw_game_state
-    
-    # Check Game Over
+    # check Game Over (before loading new column)
     jal check_collision_down
-    beq $v0, 0, respond_to_Q
+    beq $v0, 0, respond_to_Q    # If collision at spawn position = game over
+    
+    # only load new column if game is not over
+    jal load_default_column
     
     lw $ra, 0($sp)
     addi $sp, $sp, 4
     j game_loop
-
-# Helper to run one pass of logic
-#resolve_matches_and_gravity:
-    #addi $sp, $sp, -4
-    #sw $ra, 0($sp)
-    #jal clear_match_map
-    #jal scan_horizontal_matches
-    #jal scan_vertical_matches
-    #jal scan_diagonal
-    #jal clear_marked_cells # Updates Memory Only
-    #jal apply_gravity      # Updates Memory Only
-    #lw $ra, 0($sp)
-    #addi $sp, $sp, 4
-    #jr $ra
 
 set_column_in_the_board:
     addi $sp, $sp, -12
@@ -962,14 +1005,18 @@ cmc_next_row:
     j cmc_row_loop
     
 cmc_done:
-    # Apply multiplier (gems * multiplier) / 10
-    move $t0, $s2
-    lw $t1, chain_multiplier
-    mul $t0, $t0, $t1
+    # Apply multipliers: (gems * chain_multiplier * difficulty_multiplier) / 100
+    # Since both are in tenths: gems * (chain/10) * (diff/10) = gems * chain * diff / 100
+    move $t0, $s2              # t0 = number of gems cleared
+    lw $t1, chain_multiplier   # t1 = chain multiplier (in tenths)
+    lw $t2, difficulty_multiplier  # t2 = difficulty multiplier (in tenths)
     
-    li $t2, 10
-    div $t0, $t2
-    mflo $t0
+    mul $t0, $t0, $t1          # gems * chain_multiplier
+    mul $t0, $t0, $t2          # * difficulty_multiplier
+    
+    li $t3, 100
+    div $t0, $t3
+    mflo $t0                   # Final score
     
     lw $t1, score_count
     add $t1, $t1, $t0
