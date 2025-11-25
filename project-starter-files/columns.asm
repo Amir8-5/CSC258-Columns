@@ -364,8 +364,7 @@ draw_walls:
     
         
 respond_to_Q:
-  li $v0, 10                      # Quit gracefully
-  syscall
+  jal game_over
 
 respond_to_S:
     jal check_collision_down
@@ -1026,3 +1025,426 @@ gravity_done:
     lw $s2, 12($sp)
     addi $sp, $sp, 16
     jr $ra
+
+
+game_over:
+    jal draw_game_over_text
+    li $v0, 10                      # Quit gracefully
+    syscall
+    
+    
+# Function: draw_game_over_text
+draw_game_over_text:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
+    # Set Color to RED
+    li $s2, 0xFF3E3E    
+    
+    # Start Position (Top Left)
+    li $s0, 10           # Start X (Col 10)
+    li $s1, 10          # Start Y (Row 10)
+
+    # --- LETTER G ---
+    move $a0, $s2       
+    addi $a1, $s0, 1    # x+1
+    move $a2, $s1       # y
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    move $a2, $s1       # y
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    move $a2, $s1       # y
+    jal draw_unit       
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1    # y+1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1    # x+1
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to BLUE
+    li $s2, 0x6B82FE
+
+    # --- LETTER A ---
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 1    # y+1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0       # x
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1    # x+1
+    move $a2, $s1       # y
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 1    # y+1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 3    # y+3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2    # x+2
+    addi $a2, $s1, 4    # y+4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1    # x+1
+    addi $a2, $s1, 2    # y+2
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to CREAM
+    li $s2, 0xFFF5E4
+
+    # --- LETTER M ---
+    # Left Leg
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Right Leg
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Middle Dot
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 1
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to RED
+    li $s2, 0xFFA500 
+
+    # --- LETTER E ---
+    # Left Bar
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Top Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    # Mid Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Bot Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+    
+    
+    # reset x to 10 ( starting point ) 
+    li $s0, 10
+    
+    # line break for y, OVER printed in next line
+    li $s1, 17
+
+    # --- LETTER O ---
+    # Top
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    # Left
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    # Right
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 3
+    jal draw_unit
+    # Bot
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to CREAM
+    li $s2, 0xFFF5E4 
+
+    # --- LETTER V ---
+    # Left Top
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Right Top
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Point
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to BLUE
+    li $s2, 0x6B82FE
+
+    # --- LETTER E ---
+    # Left Bar
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Top Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    # Mid Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Bot Bar
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 4
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    addi $s0, $s0, 4    # Space
+    
+    # Set Color to RED
+    li $s2, 0xFF3E3E 
+
+    # --- LETTER R ---
+    # Left Bar
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    move $a1, $s0
+    addi $a2, $s1, 4
+    jal draw_unit
+    # Top Curve
+    move $a0, $s2
+    addi $a1, $s0, 1
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    move $a2, $s1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 1
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 2
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 2
+    jal draw_unit
+    # Leg
+    move $a0, $s2
+    addi $a1, $s0, 1
+    addi $a2, $s1, 3
+    jal draw_unit
+    move $a0, $s2
+    addi $a1, $s0, 2
+    addi $a2, $s1, 4
+    jal draw_unit
+
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+    
+    
