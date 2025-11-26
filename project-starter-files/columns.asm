@@ -22,6 +22,8 @@
 gray: .word 0x707070
 BLACK: .word 0x000000
 WHITE: .word 0xFFFFFF
+RED: .word 0xFF0000
+GREEN: .word 0x00FF00
 
 ##############################################################################
 # The address of the bitmap display. Don't forget to connect it!
@@ -147,6 +149,7 @@ game_loop:
     skip_gravity:
         sw $t1, drop_counter        
     skip_gravity_logic:
+        jal clear_paused_text
         lw $t9, game_over_state
         bnez $t9, skip_redraw_during_game_over
         
@@ -273,7 +276,18 @@ redraw_active_piece:
     
     lw $t0, game_over_state
     bnez $t0, skip_draw_column
+    
     jal draw_column
+    lw $t2, GAME_DIFFICULTY_CHOSEN
+    beqz $t2, skip_draw_column
+    lw $t1, is_paused
+    li $t9, 1
+    beq $t1, $t9, draw_paused_instead
+    jal clear_paused_text
+    j skip_draw_column
+
+draw_paused_instead:
+    jal draw_paused_text
 
 skip_draw_column:
     lw $ra, 0($sp)
@@ -1267,6 +1281,8 @@ clear_highs_area_next_row:
     j clear_highs_area_row
     
 clear_highs_area_done:
+    jal draw_q_text
+    jal draw_r_text
     jal draw_game_over_text
     
     lw $ra, 0($sp)
@@ -1992,3 +2008,191 @@ draw_high_score_label:
     addi $sp, $sp, 4
     jr $ra
 #################################
+draw_paused_text:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, WHITE
+    
+    # P - moved to center (row 12, col 15-17)
+    # Left bar
+    li $a1, 12
+    li $a2, 15
+    jal draw_unit
+    li $a1, 12
+    li $a2, 16
+    jal draw_unit
+    li $a1, 12
+    li $a2, 17
+    jal draw_unit
+    li $a1, 12
+    li $a2, 18
+    jal draw_unit
+    li $a1, 12
+    li $a2, 19
+    jal draw_unit
+    # Top
+    li $a1, 13
+    li $a2, 15
+    jal draw_unit
+    # Right curve
+    li $a1, 14
+    li $a2, 15
+    jal draw_unit
+    li $a1, 14
+    li $a2, 16
+    jal draw_unit
+    # Middle
+    li $a1, 13
+    li $a2, 17
+    jal draw_unit
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+    
+clear_paused_text:
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    lw $a0, BLACK
+    
+    li $s0, 12
+clear_paused_row:
+    bge $s0, 15, clear_paused_done  # rows 12-14
+    li $s1, 15
+clear_paused_col:
+    bge $s1, 20, clear_paused_next_row  # cols 15-19
+    
+    move $a1, $s0   # a1 = row (X)
+    move $a2, $s1   # a2 = col (Y)
+    jal draw_unit
+    
+    addi $s1, $s1, 1
+    j clear_paused_col
+clear_paused_next_row:
+    addi $s0, $s0, 1
+    j clear_paused_row
+clear_paused_done:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
+    jr $ra
+    
+draw_q_text:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, RED
+    
+    # Top
+    li $a1, 1      # col
+    li $a2, 26     # row
+    jal draw_unit
+    li $a1, 2
+    li $a2, 26
+    jal draw_unit
+    li $a1, 3
+    li $a2, 26
+    jal draw_unit
+    
+    # Left side
+    li $a1, 1
+    li $a2, 27
+    jal draw_unit
+    li $a1, 1
+    li $a2, 28
+    jal draw_unit
+    li $a1, 1
+    li $a2, 29
+    jal draw_unit
+    
+    # Right side
+    li $a1, 3
+    li $a2, 27
+    jal draw_unit
+    li $a1, 3
+    li $a2, 28
+    jal draw_unit
+    li $a1, 3
+    li $a2, 29
+    jal draw_unit
+    
+    # Bottom
+    li $a1, 1
+    li $a2, 30
+    jal draw_unit
+    li $a1, 2
+    li $a2, 30
+    jal draw_unit
+    
+    # Tail
+    li $a1, 3
+    li $a2, 30
+    jal draw_unit
+    li $a1, 4
+    li $a2, 31
+    jal draw_unit
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+draw_r_text:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $a0, GREEN
+    
+    # Left bar
+    li $a1, 28      # col
+    li $a2, 26    # row
+    jal draw_unit
+    li $a1, 28
+    li $a2, 27
+    jal draw_unit
+    li $a1, 28
+    li $a2, 28
+    jal draw_unit
+    li $a1, 28
+    li $a2, 29
+    jal draw_unit
+    li $a1, 28
+    li $a2, 30
+    jal draw_unit
+    
+    # Top
+    li $a1, 29
+    li $a2, 26
+    jal draw_unit
+    li $a1, 30
+    li $a2, 26
+    jal draw_unit
+    
+    # Right top curve
+    li $a1, 30
+    li $a2, 27
+    jal draw_unit
+    
+    # Middle
+    li $a1, 29
+    li $a2, 28
+    jal draw_unit
+    li $a1, 30
+    li $a2, 28
+    jal draw_unit
+    
+    # Leg
+    li $a1, 29
+    li $a2, 29
+    jal draw_unit
+    li $a1, 30
+    li $a2, 30
+    jal draw_unit
+    
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
